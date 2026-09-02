@@ -1,191 +1,78 @@
-# Project Status — Milestone 2 Complete ✓
+# Project Status - Milestone 3 Complete
 
 ## Current state
-**Milestone 2: Database Persistence, Anonymous Identity & Abuse Prevention**
+**Milestone 3: Security, Abuse Prevention & Rendering Correctness**
 
-The application has successfully migrated from in-memory mock storage to persistent PostgreSQL. All wishes, stars, and interactions now survive server restarts. Anonymous session tracking and rate limiting are fully implemented.
+Milestone 3 implementation is committed and pushed to `origin/master` as `dacd99e`. The project now has server-bound anonymous sessions, a minimum moderation pipeline, canvas-based galaxy rendering, and executable test configuration.
 
-The visual experience remains unchanged; the foundation is now real.
+The product's dark, quiet, anonymous emotional experience remains intact. Phase 5 features such as Personal Sky, Constellations, Mirror, and Morning Sky have not started.
 
 ## Detected stack
-- **Frontend**: React 19, TypeScript 6.0.2, Vite 8.2.2, Tailwind CSS 4.3.3
-- **Backend**: Node.js with Express 5.2.1, TypeScript 7.0.2, Zod for validation, `pg` for PostgreSQL
-- **Database**: PostgreSQL 12+ with connection pooling
-- **Data layer**: SQL queries with transaction support
-- **Styling**: Custom CSS + Tailwind utilities for dark, cinematic aesthetic
+- **Frontend**: React 19, TypeScript, Vite, Vitest, Testing Library
+- **Backend**: Node.js with Express, TypeScript, Zod, `pg`, `express-rate-limit`
+- **Database**: PostgreSQL 12+ with connection pooling and migrations
+- **Styling**: Custom CSS with the existing dark, cinematic aesthetic
 
-## What's New in Milestone 2
+## Milestone 3 implementation
 
-### Database
-- ✓ PostgreSQL schema: users, wishes, stars, wish_lights tables
-- ✓ Automated migrations with tracking
-- ✓ Database seeding script (~72 development wishes)
-- ✓ Foreign keys with CASCADE delete
-- ✓ UNIQUE constraints for deduplication
+### Anonymous identity and abuse prevention
+- Server-issued `othersky_sid` cookie with HttpOnly, SameSite=Lax, and production Secure settings
+- Client no longer sends or controls `anonymous_id`; API calls use `credentials: 'include'`
+- CORS is restricted to the configured frontend origin and allows credentials
+- Wish and Send Light limits use the server-bound anonymous identity
+- IP backstop limits are applied to `POST /api/wishes` and `POST /api/wishes/:id/light`
+- Existing database uniqueness keeps Send Light idempotent per anonymous identity
 
-### Backend
-- ✓ PostgreSQL connection pool (server/src/db.ts)
-- ✓ Query layer with rate limiting (server/src/storageDb.ts)
-- ✓ Anonymous session tracking per request
-- ✓ Rate limiting: 5 wishes/hour, 20 lights/hour per user
-- ✓ Duplicate Send Light prevention (database constraint)
-- ✓ Transaction support for atomic operations
-- ✓ Safe error handling (no SQL/credentials exposed)
+### Moderation
+- Obvious spam, URL, and repeated-character flooding heuristics flag wishes at creation
+- Normal wishes are auto-approved; flagged wishes are excluded from public results
+- Added `POST /api/wishes/:id/report` with a three-report flagging threshold
+- Added `GET /api/admin/queue` and `POST /api/admin/wishes/:id/moderate`
+- Admin endpoints require `Authorization: Bearer $ADMIN_TOKEN`
+- Added `server/db/migrations/002_moderation_events.sql`
+- Public list and single-wish queries return approved wishes only
 
-### Frontend
-- ✓ Anonymous session persistence in localStorage
-- ✓ Loading state indicator during data fetch
-- ✓ Error message display and dismissal
-- ✓ All API calls include anonymous_id
+### Galaxy rendering and accessibility
+- Stars render through one 2D canvas rather than one DOM button per star
+- Canvas click hit-testing selects the nearest star within its interaction radius
+- Resize handling, selected-star highlighting, and reduced-motion styling are preserved
+- A visually hidden semantic button list keeps every wish keyboard- and assistive-technology-accessible
+- The list query no longer has the old `LIMIT 500`; WebGL/instancing remains deferred for much larger skies
 
-### Documentation
-- ✓ Comprehensive API documentation (docs/API.md)
-- ✓ Database design guide (docs/DATABASE.md)
-- ✓ Updated architecture documentation (docs/ARCHITECTURE.md)
-- ✓ Setup instructions with PostgreSQL (README.md)
-- ✓ Milestone 2 completion report (MILESTONE_2_COMPLETE.md)
+### Tests and scripts
+- Root `npm test` runs server tests before frontend tests
+- Server tests cover spam screening and independent identity rate-limit buckets
+- Frontend Vitest smoke test confirms the landing screen exposes `Enter the Sky`
+- Frontend test setup uses jsdom and Testing Library
 
-## Important findings (Audit)
-- The prototype successfully maintains The Other Sky's emotional identity
-- API contract remained stable; frontend requires only minor session handling updates
-- All mock data converted to seed script for reproducible development
-- Security foundation strong (XSS, SQL injection, rate limiting all addressed)
-- Privacy design complete (no personal data collected)
+## Known limitations
+- The in-memory primary rate limiter resets when the server restarts; Redis remains a production follow-up
+- Admin moderation currently uses one shared bearer token and has no admin UI
+- Automated moderation is intentionally heuristic and requires moderator review of flagged content
+- Canvas rendering is 2D; WebGL/instancing is deferred until star counts justify it
+- Pagination and spatial loading are not yet implemented
+- No accounts, personal sky, constellations, categories filtering, Mirror, or Morning Sky features have started
 
-## Assumptions validated
-- API contract stable as advertised ✓
-- In-memory storage was entire backend ✓
-- Mock data sufficient for seed ✓
-- Tailwind ready for future expansion ✓
-- TypeScript strict mode not impeding progress ✓
+## Verification status
+- ✓ Milestone 3 changes committed and pushed to GitHub
+- ✓ Whitespace validation passed with `git diff --check`
+- ✓ Tracked `server/server.log` removed and `server.log` added to `.gitignore`
+- ✓ Root, frontend, and server test scripts are configured
+- Pending: run the full local `npm run build`, `npm run lint`, and `npm test` suite against the configured PostgreSQL environment
+- Pending: exercise cookie buckets, duplicate light, reports, admin authorization, keyboard navigation, and browser accessibility checks
 
-## Known limitations (expected MVP scope)
-- Rate limiter in-memory (resets on server restart; Redis for production)
-- Pagination not implemented (assumes <10k wishes)
-- No caching layer
-- No analytics packages (intentional)
-- Wish editing/deletion not allowed (permanence + simplicity)
-- Admin moderation dashboard not implemented
+## How to run
 
-## Deployment & Setup
-
-### Local Development
 ```bash
-# 1. Create database
-createdb the_other_sky
-
-# 2. Set environment
-cat > .env << EOF
-DATABASE_URL=postgresql://localhost/the_other_sky
-PORT=3001
-NODE_ENV=development
-EOF
-
-# 3. Install & migrate
 npm install
 npm run db:migrate
 npm run db:seed
-
-# 4. Run
 npm run dev
 ```
 
-### Supabase (Cloud)
-Use Supabase PostgreSQL connection string in DATABASE_URL; same setup commands work.
+For admin moderation, set `ADMIN_TOKEN` in the server environment. Set `FRONTEND_ORIGIN` when the frontend is not served from `http://localhost:5173`.
 
 ## Next implementation milestone
-**Milestone 3 — Real Galaxy Data + Spatial Loading Preparation**
+**Milestone 4 - Verification and performance preparation**
 
-Goals:
-- Integrate real constellation/star data
-- Implement spatial queries for region loading
-- Add pagination or infinite scroll
-- Performance optimization for large datasets
-- Caching strategy evaluation
-
-Timeline: not started yet.
-
-## Verification Status
-- ✓ TypeScript compilation
-- ✓ Linting passes
-- ✓ Database migrations
-- ✓ Seed data generation
-- ✓ Full wish lifecycle (create → read → light → persist)
-- ✓ Rate limiting enforcement
-- ✓ Duplicate deduplication
-- ✓ XSS safety verified
-- ✓ Session persistence
-- ✓ Error handling (safe messages)
-
-## Files Changed
-
-### Backend
-- `server/src/index.ts` — Complete rewrite for PostgreSQL
-- `server/src/db.ts` — New connection pool layer
-- `server/src/storageDb.ts` — New SQL query layer
-- `server/src/types.ts` — Added DB type definitions
-- `server/src/utils.ts` — Anonymous ID generation
-- `server/src/runMigrations.ts` — New migration runner
-- `server/src/seedDb.ts` — New seed script
-- `server/package.json` — Added `pg`, `@types/pg`, db commands
-
-### Frontend
-- `frontend/src/App.tsx` — Session + error state management
-- `frontend/src/App.css` — Loading/error UI styles
-
-### Configuration
-- `package.json` — Added db convenience commands
-- `.env.example` — Added DATABASE_URL
-- `server/db/migrations/001_initial_schema.sql` — New schema file
-
-### Documentation
-- `README.md` — Complete PostgreSQL setup guide
-- `PROJECT_STATUS.md` — This file (updated)
-- `docs/ARCHITECTURE.md` — Comprehensive system design
-- `docs/API.md` — Full API reference
-- `docs/DATABASE.md` — Database design guide
-- `MILESTONE_2_COMPLETE.md` — Detailed completion report
-
-## How to Run
-
-### First Time
-```bash
-npm install
-npm run db:migrate
-npm run db:seed
-npm run dev
-```
-
-### After Database Reset
-```bash
-npm run db:reset  # Clears and reseed
-npm run dev
-```
-
-### Production Build
-```bash
-npm run build
-cd server && npm run start
-```
-
-## Emotional Experience
-
-The emotional experience is unchanged from Milestone 1:
-
-- **Quiet**: Dark, spacious UI with minimal clutter
-- **Mysterious**: Wishes appear as procedural stars; discovery feels organic
-- **Intimate**: Reading an anonymous wish feels personal
-- **Beautiful**: Cinematic styling, subtle motion, careful use of color
-- **Human**: Wishes are text-first; no gamification, no profile ego
-- **Contemplative**: No social-media mechanics; "Send Light" is witnessing, not liking
-- **Permanent**: Wishes persist; release animation implies they're now part of the sky
-
-The product feels **recognizably like The Other Sky** and maintains its intentional boundaries.
-
----
-
-## Ready for Next Phase
-
-The foundation is solid, persistent, and secure. The app is ready to scale wishes and add spatial/constellation features without architectural changes.
-
-All code is beginner-readable, well-documented, and positioned for student developers to extend.
+Before starting later product phases, complete the pending Milestone 3 browser and PostgreSQL verification. The next product work should follow the roadmap and project specification; do not add Phase 5 features as part of this hardening milestone.

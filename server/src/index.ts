@@ -1,8 +1,9 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
 import express, { Request, Response } from 'express';
 import { z } from 'zod';
-import { addLight, createWish, getWishById, listWishes } from './storageDb';
+import { addLight, createWish, getModerationQueue, getWishById, listWishes, moderateWish, reportWish } from './storageDb';
 import { generateAnonymousId, safeErrorMessage } from './utils';
 
 dotenv.config();
@@ -21,26 +22,51 @@ const lightSchema = z.object({
   wishId: z.string().min(1, 'Wish ID required'),
 });
 
+const reportSchema = z.object({ reason: z.string().trim().max(500).optional() });
+const moderationSchema = z.object({ action: z.enum(['approve', 'reject']) });
+const sessionCookieName = 'othersky_sid';
+const frontendOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
+const ipBackstop = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Please wait before trying again.' } },
+});
+
+function parseCookie(header: string | undefined, name: string): string | undefined {
+  return header?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
+}
+
+function requireAdmin(req: Request, res: Response, next: () => void) {
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected || req.header('authorization') !== `Bearer ${expected}`) {
+    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Admin authorization required.' } });
+    return;
+  }
+  next();
+}
+
 // Middleware
-app.use(cors());
+app.use(cors({ origin: frontendOrigin, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
 
 // Session middleware: get or create anonymous ID
 app.use((req: Request, res: Response, next) => {
-  // Try to get anonymous ID from cookie or query param
-  let anonymousId = req.query.anonymous_id as string | undefined;
+  let anonymousId = parseCookie(req.header('cookie'), sessionCookieName);
 
   if (!anonymousId) {
-    // Generate new anonymous ID
     anonymousId = generateAnonymousId();
+    res.cookie(sessionCookieName, anonymousId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 365,
+      path: '/',
+    });
   }
 
-  // Attach to request for use in route handlers
   (req as any).anonymousId = anonymousId;
-
-  // Set in response header so client can persist it
-  res.setHeader('X-Anonymous-ID', anonymousId);
-
   next();
 });
 
@@ -83,7 +109,7 @@ app.get('/api/wishes/:id', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/wishes', async (req: Request, res: Response) => {
+app.post('/api/wishes', ipBackstop, async (req: Request, res: Response) => {
   try {
     const parsed = createWishSchema.safeParse(req.body);
 
@@ -118,7 +144,7 @@ app.post('/api/wishes', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/wishes/:id/light', async (req: Request, res: Response) => {
+app.post('/api/wishes/:id/light', ipBackstop, async (req: Request, res: Response) => {
   try {
     const parsed = lightSchema.safeParse({ wishId: req.params.id, ...req.body });
 
@@ -154,6 +180,37 @@ app.post('/api/wishes/:id/light', async (req: Request, res: Response) => {
       success: false,
       error: safeErrorMessage(error),
     });
+  }
+});
+
+app.post('/api/wishes/:id/report', async (req: Request, res: Response) => {
+  const parsed = reportSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Report reason was invalid.' } });
+  try {
+    const result = await reportWish(req.params.id as string, (req as any).anonymousId as string, parsed.data.reason);
+    if (!result) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Wish not found.' } });
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error reporting wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/admin/queue', requireAdmin, async (_req: Request, res: Response) => {
+  try { return res.json({ success: true, data: await getModerationQueue() }); }
+  catch (error) { console.error('Error loading moderation queue:', error); return res.status(500).json({ success: false, error: safeErrorMessage(error) }); }
+});
+
+app.post('/api/admin/wishes/:id/moderate', requireAdmin, async (req: Request, res: Response) => {
+  const parsed = moderationSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Moderation action was invalid.' } });
+  try {
+    const wish = await moderateWish(req.params.id as string, parsed.data.action);
+    if (!wish) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Wish not found.' } });
+    return res.json({ success: true, data: wish });
+  } catch (error) {
+    console.error('Error moderating wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
   }
 });
 

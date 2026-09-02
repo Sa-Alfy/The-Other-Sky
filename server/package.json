@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "test": "node --test dist/**/*.test.js",
+    "test": "npm run build && node --test dist",
     "db:migrate": "tsx src/runMigrations.ts",
     "db:seed": "tsx src/seedDb.ts",
     "db:reset": "npm run db:migrate && npm run db:seed"
@@ -16,6 +16,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
     "pg": "^8.11.3",
     "zod": "^4.5.4"
   },

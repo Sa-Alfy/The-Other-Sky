@@ -18,7 +18,14 @@ const rateLimitConfigs = {
   sendLight: { maxRequests: 20, windowMs: 60 * 60 * 1000 } as RateLimitConfig, // 20 lights per hour
 };
 
-function checkRateLimit(userId: string, action: keyof typeof rateLimitConfigs): boolean {
+const reportThreshold = 3;
+const spamPatterns = [/https?:\/\//i, /(.)\1{9,}/, /(?:free money|click here|buy now|casino)/i];
+
+export function isSpamLike(text: string): boolean {
+  return spamPatterns.some((pattern) => pattern.test(text));
+}
+
+export function checkRateLimit(userId: string, action: keyof typeof rateLimitConfigs): boolean {
   const key = `${userId}:${action}`;
   const config = rateLimitConfigs[action];
   const now = Date.now();
@@ -86,7 +93,7 @@ export async function listWishes(): Promise<Wish[]> {
        WHERE w.status = 'approved'
        GROUP BY w.id, s.id
        ORDER BY w.created_at DESC
-       LIMIT 500`
+      `
     );
 
     return Promise.all(
@@ -183,6 +190,11 @@ export async function createWish(
   input: CreateWishInput,
   anonymousId: string
 ): Promise<Wish | { error: string; code: string }> {
+  const text = input.text.trim();
+  if (text.length < 3 || text.length > 280) {
+    return { error: 'Wish must be between 3 and 280 characters.', code: 'INVALID_REQUEST' };
+  }
+
   // Check rate limit
   if (!checkRateLimit(anonymousId, 'createWish')) {
     return {
@@ -207,9 +219,9 @@ export async function createWish(
     const createdAt = new Date().toISOString();
     const wishResult = await client.query(
       `INSERT INTO wishes (user_id, text, category, status, visibility, created_at, updated_at)
-       VALUES ($1, $2, $3, 'approved', $4, $5, $6)
+      VALUES ($1, $2, $3, $7, $4, $5, $6)
        RETURNING id, text, category, status, visibility, created_at, updated_at`,
-      [userId, input.text.trim(), input.category ?? 'general', input.visibility ?? 'public', createdAt, createdAt]
+      [userId, text, input.category ?? 'general', input.visibility ?? 'public', createdAt, createdAt, isSpamLike(text) ? 'flagged' : 'approved']
     );
     const wish = wishResult.rows[0];
 
@@ -232,6 +244,29 @@ export async function createWish(
 
     return hydrateWish(wish, { ...star, wish_id: wish.id, id: '', created_at: createdAt }, 0);
   });
+}
+
+export async function reportWish(wishId: string, anonymousId: string, reason?: string): Promise<{ reported: true } | undefined> {
+  return transaction(async (client) => {
+    const userResult = await client.query(`INSERT INTO users (anonymous_id, last_seen_at) VALUES ($1, CURRENT_TIMESTAMP) ON CONFLICT (anonymous_id) DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP RETURNING id`, [anonymousId]);
+    const wish = await client.query('SELECT id FROM wishes WHERE id = $1', [wishId]);
+    if (wish.rows.length === 0) return undefined;
+    await client.query(`INSERT INTO moderation_events (wish_id, action, reason_code, reviewer_id, metadata) VALUES ($1, 'report', $2, NULL, $3)`, [wishId, reason ?? 'unspecified', JSON.stringify({ reporter_id: userResult.rows[0].id })]);
+    const reports = await client.query("SELECT COUNT(*)::int AS count FROM moderation_events WHERE wish_id = $1 AND action = 'report'", [wishId]);
+    if (reports.rows[0].count >= reportThreshold) await client.query("UPDATE wishes SET status = 'flagged', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [wishId]);
+    return { reported: true };
+  });
+}
+
+export async function getModerationQueue(): Promise<Wish[]> {
+  const result = await query("SELECT w.*, s.x, s.y, s.z, s.size, s.brightness, s.hue, 0 AS reaction_count FROM wishes w LEFT JOIN stars s ON w.id = s.wish_id WHERE w.status IN ('pending', 'flagged') ORDER BY w.created_at ASC");
+  return Promise.all(result.rows.map((row: any) => hydrateWish(row, { ...row, wish_id: row.id }, Number(row.reaction_count))));
+}
+
+export async function moderateWish(id: string, action: 'approve' | 'reject'): Promise<Wish | undefined> {
+  const result = await query("UPDATE wishes SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *", [id, action === 'approve' ? 'approved' : 'rejected']);
+  if (result.rows.length === 0) return undefined;
+  return getWishById(id);
 }
 
 /**

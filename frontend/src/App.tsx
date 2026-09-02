@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import './App.css'
 
 type Wish = {
@@ -19,20 +19,6 @@ type Wish = {
 
 const apiBase = import.meta.env.VITE_API_URL || ''
 
-// Session management
-const ANONYMOUS_ID_KEY = 'othersky_anonymous_id'
-
-function getOrCreateAnonymousId(): string {
-  const stored = localStorage.getItem(ANONYMOUS_ID_KEY)
-  if (stored) return stored
-  // Will be set by server response header
-  return 'temp'
-}
-
-function storeAnonymousId(id: string) {
-  localStorage.setItem(ANONYMOUS_ID_KEY, id)
-}
-
 function App() {
   const [wishes, setWishes] = useState<Wish[]>([])
   const [entered, setEntered] = useState(false)
@@ -42,33 +28,23 @@ function App() {
   const [isComposerOpen, setIsComposerOpen] = useState(false)
   const [isReleasing, setIsReleasing] = useState(false)
   const [lightPulse, setLightPulse] = useState(0)
-  const [anonymousId, setAnonymousId] = useState(getOrCreateAnonymousId())
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  // Helper to make API calls with anonymous ID
   const apiCall = async (
     endpoint: string,
     options?: RequestInit
   ): Promise<{ ok: boolean; data?: unknown; error?: string }> => {
     try {
-      const url = new URL(`${apiBase}${endpoint}`)
-      url.searchParams.set('anonymous_id', anonymousId)
-
-      const response = await fetch(url.toString(), {
+      const response = await fetch(`${apiBase}${endpoint}`, {
         ...options,
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...options?.headers,
         },
       })
-
-      // Store anonymous ID from response header if present
-      const headerAnonymousId = response.headers.get('X-Anonymous-ID')
-      if (headerAnonymousId && headerAnonymousId !== anonymousId) {
-        setAnonymousId(headerAnonymousId)
-        storeAnonymousId(headerAnonymousId)
-      }
 
       const payload = await response.json()
 
@@ -101,12 +77,62 @@ function App() {
     }
 
     void loadWishes()
-  }, [anonymousId])
+  }, [])
 
-  const selectedSummary = useMemo(() => {
-    if (!selectedWish) return 'No wish selected yet.'
-    return selectedWish.text
-  }, [selectedWish])
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !entered) return
+    const context = canvas.getContext('2d')
+    if (!context) return
+
+    const draw = () => {
+      const rect = canvas.getBoundingClientRect()
+      const ratio = window.devicePixelRatio || 1
+      canvas.width = Math.max(1, Math.floor(rect.width * ratio))
+      canvas.height = Math.max(1, Math.floor(rect.height * ratio))
+      context.setTransform(ratio, 0, 0, ratio, 0, 0)
+      context.clearRect(0, 0, rect.width, rect.height)
+      wishes.forEach((wish) => {
+        const x = wish.x * rect.width
+        const y = wish.y * rect.height
+        const radius = Math.max(4, wish.size * 5)
+        const glow = context.createRadialGradient(x, y, 0, x, y, radius * 4)
+        glow.addColorStop(0, `hsla(${wish.hue}, 100%, 90%, ${Math.min(1, wish.brightness)})`)
+        glow.addColorStop(0.25, `hsla(${wish.hue}, 100%, 70%, 0.75)`)
+        glow.addColorStop(1, 'rgba(255,255,255,0)')
+        context.fillStyle = glow
+        context.beginPath()
+        context.arc(x, y, radius * 4, 0, Math.PI * 2)
+        context.fill()
+        if (selectedWish?.id === wish.id) {
+          context.strokeStyle = 'rgba(255,255,255,0.9)'
+          context.lineWidth = 1
+          context.beginPath()
+          context.arc(x, y, radius + 4, 0, Math.PI * 2)
+          context.stroke()
+        }
+      })
+    }
+
+    draw()
+    const observer = new ResizeObserver(draw)
+    observer.observe(canvas)
+    return () => observer.disconnect()
+  }, [entered, selectedWish, wishes])
+
+  const selectNearestWish = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = event.currentTarget
+    const rect = canvas.getBoundingClientRect()
+    const clickX = event.clientX - rect.left
+    const clickY = event.clientY - rect.top
+    const nearest = wishes.reduce<{ wish: Wish | null; distance: number }>((current, wish) => {
+      const distance = Math.hypot(wish.x * rect.width - clickX, wish.y * rect.height - clickY)
+      return distance < current.distance ? { wish, distance } : current
+    }, { wish: null, distance: Number.POSITIVE_INFINITY })
+    if (nearest.wish && nearest.distance <= Math.max(18, nearest.wish.size * 8)) setSelectedWish(nearest.wish)
+  }
+
+  const selectedSummary = selectedWish?.text ?? 'No wish selected yet.'
 
   const handleLight = async () => {
     if (!selectedWish) return
@@ -198,26 +224,12 @@ function App() {
               </button>
             </div>
           )}
-          <div className="starfield" aria-label="Galaxy of wishes">
+          <canvas ref={canvasRef} className="starfield" aria-label="Galaxy of wishes" onClick={selectNearestWish} />
+          <ul className="sr-only" aria-label="Wishes in the sky">
             {wishes.map((wish) => (
-              <button
-                key={wish.id}
-                type="button"
-                className={`star ${selectedWish?.id === wish.id ? 'selected' : ''}`}
-                style={{
-                  left: `${wish.x * 100}%`,
-                  top: `${wish.y * 100}%`,
-                  width: `${wish.size * 10}px`,
-                  height: `${wish.size * 10}px`,
-                  opacity: wish.visibility === 'public' ? 1 : 0.6,
-                  background: `radial-gradient(circle, hsla(${wish.hue}, 100%, 85%, 1) 0%, hsla(${wish.hue}, 100%, 68%, 0.9) 25%, rgba(255,255,255,0) 100%)`,
-                  boxShadow: `0 0 ${wish.brightness * 18 + 10}px hsla(${wish.hue}, 100%, 75%, 0.9)`,
-                }}
-                aria-label={`Open wish: ${wish.text}`}
-                onClick={() => setSelectedWish(wish)}
-              />
+              <li key={wish.id}><button type="button" onClick={() => setSelectedWish(wish)}>Open wish: {wish.text}</button></li>
             ))}
-          </div>
+          </ul>
 
           <header className="top-bar">
             <div>

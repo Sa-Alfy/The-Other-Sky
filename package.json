@@ -6,7 +6,7 @@
     "dev": "concurrently \"npm --prefix server run dev\" \"npm --prefix frontend run dev -- --host 0.0.0.0\"",
     "build": "npm --prefix frontend run build && npm --prefix server run build",
     "lint": "npm --prefix frontend run lint",
-    "test": "npm --prefix frontend run test && npm --prefix server run test",
+    "test": "npm --prefix server run test && npm --prefix frontend run test",
     "typecheck": "npm --prefix server run build",
     "db:migrate": "npm --prefix server run db:migrate",
     "db:seed": "npm --prefix server run db:seed",

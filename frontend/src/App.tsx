@@ -1,21 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import './App.css'
-
-type Wish = {
-  id: string
-  text: string
-  category: string
-  status: string
-  visibility: string
-  createdAt: string
-  reactions: number
-  x: number
-  y: number
-  z: number
-  size: number
-  brightness: number
-  hue: number
-}
+import { GalaxyCanvas, type GalaxyCanvasRef, type Wish } from './components/GalaxyCanvas'
 
 const apiBase = import.meta.env.VITE_API_URL || ''
 
@@ -30,7 +15,7 @@ function App() {
   const [lightPulse, setLightPulse] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const galaxyCanvasRef = useRef<GalaxyCanvasRef>(null)
 
   const apiCall = async (
     endpoint: string,
@@ -79,57 +64,11 @@ function App() {
     void loadWishes()
   }, [])
 
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !entered) return
-    const context = canvas.getContext('2d')
-    if (!context) return
-
-    const draw = () => {
-      const rect = canvas.getBoundingClientRect()
-      const ratio = window.devicePixelRatio || 1
-      canvas.width = Math.max(1, Math.floor(rect.width * ratio))
-      canvas.height = Math.max(1, Math.floor(rect.height * ratio))
-      context.setTransform(ratio, 0, 0, ratio, 0, 0)
-      context.clearRect(0, 0, rect.width, rect.height)
-      wishes.forEach((wish) => {
-        const x = wish.x * rect.width
-        const y = wish.y * rect.height
-        const radius = Math.max(4, wish.size * 5)
-        const glow = context.createRadialGradient(x, y, 0, x, y, radius * 4)
-        glow.addColorStop(0, `hsla(${wish.hue}, 100%, 90%, ${Math.min(1, wish.brightness)})`)
-        glow.addColorStop(0.25, `hsla(${wish.hue}, 100%, 70%, 0.75)`)
-        glow.addColorStop(1, 'rgba(255,255,255,0)')
-        context.fillStyle = glow
-        context.beginPath()
-        context.arc(x, y, radius * 4, 0, Math.PI * 2)
-        context.fill()
-        if (selectedWish?.id === wish.id) {
-          context.strokeStyle = 'rgba(255,255,255,0.9)'
-          context.lineWidth = 1
-          context.beginPath()
-          context.arc(x, y, radius + 4, 0, Math.PI * 2)
-          context.stroke()
-        }
-      })
+  const handleSelectWish = (wish: Wish | null) => {
+    setSelectedWish(wish)
+    if (wish) {
+      galaxyCanvasRef.current?.recenterOnWish(wish)
     }
-
-    draw()
-    const observer = new ResizeObserver(draw)
-    observer.observe(canvas)
-    return () => observer.disconnect()
-  }, [entered, selectedWish, wishes])
-
-  const selectNearestWish = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = event.currentTarget
-    const rect = canvas.getBoundingClientRect()
-    const clickX = event.clientX - rect.left
-    const clickY = event.clientY - rect.top
-    const nearest = wishes.reduce<{ wish: Wish | null; distance: number }>((current, wish) => {
-      const distance = Math.hypot(wish.x * rect.width - clickX, wish.y * rect.height - clickY)
-      return distance < current.distance ? { wish, distance } : current
-    }, { wish: null, distance: Number.POSITIVE_INFINITY })
-    if (nearest.wish && nearest.distance <= Math.max(18, nearest.wish.size * 8)) setSelectedWish(nearest.wish)
   }
 
   const selectedSummary = selectedWish?.text ?? 'No wish selected yet.'
@@ -175,7 +114,7 @@ function App() {
     if (result.ok && result.data) {
       const createdWish = result.data as Wish
       setWishes((current) => [createdWish, ...current])
-      setSelectedWish(createdWish)
+      handleSelectWish(createdWish)
       setDraft('')
       setIsComposerOpen(false)
       setTimeout(() => setIsReleasing(false), 1400)
@@ -224,10 +163,19 @@ function App() {
               </button>
             </div>
           )}
-          <canvas ref={canvasRef} className="starfield" aria-label="Galaxy of wishes" onClick={selectNearestWish} />
+          <GalaxyCanvas
+            ref={galaxyCanvasRef}
+            wishes={wishes}
+            selectedWish={selectedWish}
+            onSelectWish={handleSelectWish}
+          />
           <ul className="sr-only" aria-label="Wishes in the sky">
             {wishes.map((wish) => (
-              <li key={wish.id}><button type="button" onClick={() => setSelectedWish(wish)}>Open wish: {wish.text}</button></li>
+              <li key={wish.id}>
+                <button type="button" onClick={() => handleSelectWish(wish)}>
+                  Open wish: {wish.text}
+                </button>
+              </li>
             ))}
           </ul>
 

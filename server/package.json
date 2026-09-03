@@ -7,7 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "test": "npm run build && node --test dist",
+    "test": "npm run build && node --test dist/**/*.test.js",
     "db:migrate": "tsx src/runMigrations.ts",
     "db:seed": "tsx src/seedDb.ts",
     "db:reset": "npm run db:migrate && npm run db:seed"

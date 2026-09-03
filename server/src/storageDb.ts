@@ -251,7 +251,15 @@ export async function reportWish(wishId: string, anonymousId: string, reason?: s
     const userResult = await client.query(`INSERT INTO users (anonymous_id, last_seen_at) VALUES ($1, CURRENT_TIMESTAMP) ON CONFLICT (anonymous_id) DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP RETURNING id`, [anonymousId]);
     const wish = await client.query('SELECT id FROM wishes WHERE id = $1', [wishId]);
     if (wish.rows.length === 0) return undefined;
-    await client.query(`INSERT INTO moderation_events (wish_id, action, reason_code, reviewer_id, metadata) VALUES ($1, 'report', $2, NULL, $3)`, [wishId, reason ?? 'unspecified', JSON.stringify({ reporter_id: userResult.rows[0].id })]);
+    const reporterId = userResult.rows[0].id;
+    const existingReport = await client.query(
+      `SELECT id FROM moderation_events WHERE wish_id = $1 AND action = 'report' AND metadata->>'reporter_id' = $2 LIMIT 1`,
+      [wishId, reporterId]
+    );
+    if (existingReport.rows.length > 0) {
+      return { reported: true };
+    }
+    await client.query(`INSERT INTO moderation_events (wish_id, action, reason_code, reviewer_id, metadata) VALUES ($1, 'report', $2, NULL, $3)`, [wishId, reason ?? 'unspecified', JSON.stringify({ reporter_id: reporterId })]);
     const reports = await client.query("SELECT COUNT(*)::int AS count FROM moderation_events WHERE wish_id = $1 AND action = 'report'", [wishId]);
     if (reports.rows[0].count >= reportThreshold) await client.query("UPDATE wishes SET status = 'flagged', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [wishId]);
     return { reported: true };

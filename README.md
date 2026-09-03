@@ -3,13 +3,14 @@
 A quiet, anonymous digital universe where wishes become stars.
 
 ## Current milestone
-**Milestone 2: Database Persistence, Anonymous Identity & Abuse Prevention**
+**Milestone 4: End-to-End Verification (Postgres + Browser)**
 
-The product is moving from in-memory mock data to persistent PostgreSQL storage. The visual and emotional experience remains unchanged; the implementation now supports:
+The core application and Milestone 3 verification work are complete. The implementation supports:
 - Real wish persistence (survives server restart)
 - Anonymous session tracking (no accounts, no personal data)
 - Rate limiting and abuse prevention
 - Moderation-aware wish storage
+- Browser-verified galaxy, wish, light, and submission flows
 
 ## Stack
 - Frontend: React + TypeScript + Vite
@@ -107,9 +108,11 @@ Open http://localhost:5173 and verify:
 ### Frontend
 ```bash
 cd frontend
+npm install         # Clean install verified
 npm run dev      # Dev server
 npm run build    # Production build
 npm run lint     # Check code style
+npm test          # Run Vitest tests
 ```
 
 ### Backend
@@ -168,7 +171,24 @@ cd server && npm run lint  # Backend (TypeScript compiler)
 ```
 
 ### Testing
-Tests are not yet implemented (planned for future phases).
+Frontend verification from a clean install:
+
+```text
+npm run build      # Passed with zero TypeScript errors
+npm run lint       # Passed with zero warnings and errors
+npm test           # 3 files passed, 10 tests passed
+```
+
+Server verification from a clean install:
+
+```text
+npm run build      # Passed
+npm test           # 3 tests passed, 0 failed
+```
+
+The canvas tests print jsdom `HTMLCanvasElement.getContext()` not-implemented
+warnings because jsdom does not execute real canvas drawing. Browser verification
+is still required for rendering and interaction behavior.
 
 ## Deployment
 
@@ -176,5 +196,5 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production setup guidance.
 
 ---
 
-**Status:** Milestone 2 implementation in progress  
-**Last updated:** 2026-09-02
+**Status:** Milestone 4 verification complete; Milestone 5 is next
+**Last updated:** 2026-09-04

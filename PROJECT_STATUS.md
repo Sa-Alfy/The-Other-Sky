@@ -153,7 +153,8 @@ Tested via browser subagent at `http://localhost:5173/`.
 - ✓ Milestone 3.1 build/test fixes committed (commit `9db838a`)
 - ✓ `npm run build` (frontend) — zero TypeScript or build errors
 - ✓ `npm run lint` (frontend oxlint) — 0 warnings, 0 errors
-- ✓ `npm test` (frontend Vitest) — 1/1 pass
+- ✓ Milestone 3.4 clean frontend install — plain `npm install` succeeds with `@testing-library/dom@10.4.1`
+- ✓ `npm test` (frontend Vitest) — 3 files, 10/10 tests pass
 - ✓ `npm test` (server) — 3/3 pass against real PostgreSQL 16.1
 - ✓ Cookie rate-limit buckets — independently enforced, 5-wish cap confirmed
 - ✓ Duplicate light — idempotent via DB unique constraint
@@ -163,6 +164,24 @@ Tested via browser subagent at `http://localhost:5173/`.
 - ✓ Admin moderate — approve/reject changes wish status and public visibility
 - ✓ Browser UI — landing, galaxy canvas, keyboard nav, wish panel, wish form all work
 - ✓ Browser accessibility — semantic HTML, aria-labels on buttons, zero console errors
+
+### Milestone 3.4 — Clean-install pipeline
+
+Verified on 2026-09-04 from fresh dependency directories:
+
+```text
+frontend: npm install, npm run build, npm run lint, npm test — all passed
+server:   npm install, npm run build, npm test — all passed
+```
+
+The frontend fix adds `@testing-library/dom` as a devDependency for the Testing
+Library peer requirements. No Vitest version change or `.npmrc` workaround was needed; plain `npm install` completed successfully.
+needed; plain `npm install` completed successfully.
+
+Frontend canvas tests still print jsdom `HTMLCanvasElement.getContext()`
+not-implemented warnings. Those tests verify mounting and non-throwing behavior,
+not real canvas rendering or interaction; browser verification remains the source
+of truth for those behaviors.
 
 ## How to run
 

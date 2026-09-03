@@ -64,6 +64,19 @@ function App() {
     void loadWishes()
   }, [])
 
+  useEffect(() => {
+    if (!selectedWish) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedWish(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedWish])
+
   const handleSelectWish = (wish: Wish | null) => {
     setSelectedWish(wish)
     if (wish) {
@@ -190,9 +203,20 @@ function App() {
             </div>
           </header>
 
-          <section className="wish-card" aria-live="polite">
+          <section
+            className={`wish-card ${selectedWish ? 'wish-card--selected' : 'wish-card--empty'}`}
+            aria-live="polite"
+          >
             {selectedWish ? (
               <>
+                <button
+                  type="button"
+                  className="wish-close"
+                  onClick={() => setSelectedWish(null)}
+                  aria-label="Back to the sky"
+                >
+                  ×
+                </button>
                 <div className="wish-mark">✦</div>
                 <blockquote>“{selectedSummary}”</blockquote>
                 <div className="wish-meta">
@@ -204,7 +228,7 @@ function App() {
                   <button type="button" className="primary" onClick={handleLight}>
                     ✦ Send Light
                   </button>
-                  <button type="button" className="secondary" onClick={() => setSelectedWish(selectedWish)}>
+                  <button type="button" className="secondary" disabled title="Coming soon">
                     Save
                   </button>
                 </div>
@@ -219,47 +243,6 @@ function App() {
             )}
           </section>
 
-          {isComposerOpen && (
-            <div className="composer-backdrop" role="dialog" aria-modal="true">
-              <div className="composer-panel">
-                <button
-                  type="button"
-                  className="close-button"
-                  onClick={() => setIsComposerOpen(false)}
-                  aria-label="Close wish composer"
-                >
-                  ×
-                </button>
-                <p className="eyebrow">What do you wish for?</p>
-                <form onSubmit={handleCreateWish}>
-                  <label className="sr-only" htmlFor="wish-text">
-                    Write your wish
-                  </label>
-                  <textarea
-                    id="wish-text"
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    maxLength={280}
-                    placeholder="I hope future me is kinder to myself."
-                  />
-                  <div className="composer-footer">
-                    <select value={category} onChange={(event) => setCategory(event.target.value)}>
-                      <option value="hope">Hope</option>
-                      <option value="love">Love</option>
-                      <option value="peace">Peace</option>
-                      <option value="healing">Healing</option>
-                      <option value="growth">Growth</option>
-                      <option value="clarity">Clarity</option>
-                    </select>
-                    <button type="submit" className="primary large">
-                      Release it
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
           {isReleasing && (
             <div className="release-overlay" aria-live="polite">
               <div className="particle" aria-hidden="true" />
@@ -269,6 +252,47 @@ function App() {
             </div>
           )}
         </main>
+      )}
+
+      {isComposerOpen && (
+        <div className="composer-backdrop" role="dialog" aria-modal="true">
+          <div className="composer-panel">
+            <button
+              type="button"
+              className="close-button"
+              onClick={() => setIsComposerOpen(false)}
+              aria-label="Close wish composer"
+            >
+              ×
+            </button>
+            <p className="eyebrow">What do you wish for?</p>
+            <form onSubmit={handleCreateWish}>
+              <label className="sr-only" htmlFor="wish-text">
+                Write your wish
+              </label>
+              <textarea
+                id="wish-text"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                maxLength={280}
+                placeholder="I hope future me is kinder to myself."
+              />
+              <div className="composer-footer">
+                <select value={category} onChange={(event) => setCategory(event.target.value)}>
+                  <option value="hope">Hope</option>
+                  <option value="love">Love</option>
+                  <option value="peace">Peace</option>
+                  <option value="healing">Healing</option>
+                  <option value="growth">Growth</option>
+                  <option value="clarity">Clarity</option>
+                </select>
+                <button type="submit" className="primary large">
+                  Release it
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   )

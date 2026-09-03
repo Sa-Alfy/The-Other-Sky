@@ -91,7 +91,8 @@ export async function listWishes(): Promise<Wish[]> {
        LEFT JOIN stars s ON w.id = s.wish_id
        LEFT JOIN wish_lights wl ON w.id = wl.wish_id
        WHERE w.status = 'approved'
-       GROUP BY w.id, s.id
+      GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+          s.x, s.y, s.z, s.size, s.brightness, s.hue
        ORDER BY w.created_at DESC
       `
     );
@@ -144,7 +145,8 @@ export async function getWishById(id: string): Promise<Wish | undefined> {
        LEFT JOIN stars s ON w.id = s.wish_id
        LEFT JOIN wish_lights wl ON w.id = wl.wish_id
        WHERE w.id = $1 AND w.status = 'approved'
-       GROUP BY w.id, s.id`,
+      GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+          s.x, s.y, s.z, s.size, s.brightness, s.hue`,
       [id]
     );
 

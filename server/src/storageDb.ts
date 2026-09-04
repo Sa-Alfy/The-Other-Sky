@@ -122,7 +122,7 @@ export async function listWishes(category?: string): Promise<Wish[]> {
       FROM wishes w
       LEFT JOIN stars s ON w.id = s.wish_id
       LEFT JOIN wish_lights wl ON w.id = wl.wish_id
-      WHERE w.status = 'approved'
+      WHERE w.status = 'approved' AND w.visibility = 'public'
     `;
     const params: any[] = [];
 
@@ -158,7 +158,7 @@ export async function getWishById(id: string): Promise<Wish | undefined> {
        FROM wishes w
        LEFT JOIN stars s ON w.id = s.wish_id
        LEFT JOIN wish_lights wl ON w.id = wl.wish_id
-       WHERE w.id = $1 AND w.status = 'approved'
+       WHERE w.id = $1 AND w.status = 'approved' AND w.visibility = 'public'
        GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
                 w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue`,
       [id]
@@ -265,7 +265,20 @@ export async function getModerationQueue(): Promise<Wish[]> {
 export async function moderateWish(id: string, action: 'approve' | 'reject'): Promise<Wish | undefined> {
   const result = await query("UPDATE wishes SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *", [id, action === 'approve' ? 'approved' : 'rejected']);
   if (result.rows.length === 0) return undefined;
-  return getWishById(id);
+  const wishResult = await query(
+    `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+            w.fulfilled_at, w.fulfillment_note,
+            s.x, s.y, s.z, s.size, s.brightness, s.hue,
+            0 AS reaction_count
+     FROM wishes w
+     LEFT JOIN stars s ON w.id = s.wish_id
+     WHERE w.id = $1
+     GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+              w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue`,
+    [id]
+  );
+  if (wishResult.rows.length === 0) return undefined;
+  return mapRowToWish(wishResult.rows[0]);
 }
 
 /**
@@ -295,8 +308,11 @@ export async function addLight(
     );
     const userId = userResult.rows[0].id;
 
-    // Check if wish exists
-    const wishCheck = await client.query('SELECT id FROM wishes WHERE id = $1', [wishId]);
+    // Check if wish exists and is approved and public
+    const wishCheck = await client.query(
+      "SELECT id FROM wishes WHERE id = $1 AND status = 'approved' AND visibility = 'public'",
+      [wishId]
+    );
     if (wishCheck.rows.length === 0) {
       return undefined;
     }
@@ -341,7 +357,10 @@ export async function saveWish(
 ): Promise<{ saved: true } | undefined> {
   return transaction(async (client) => {
     const user = await getOrCreateUser(anonymousId);
-    const wishCheck = await client.query("SELECT id FROM wishes WHERE id = $1 AND status = 'approved'", [wishId]);
+    const wishCheck = await client.query(
+      "SELECT id FROM wishes WHERE id = $1 AND status = 'approved' AND visibility = 'public'",
+      [wishId]
+    );
     if (wishCheck.rows.length === 0) return undefined;
 
     await client.query(
@@ -408,7 +427,7 @@ export async function getPersonalSky(anonymousId: string): Promise<PersonalSkyDa
        JOIN saved_wishes sw ON w.id = sw.wish_id
        LEFT JOIN stars s ON w.id = s.wish_id
        LEFT JOIN wish_lights wl ON w.id = wl.wish_id
-       WHERE sw.user_id = $1 AND w.status = 'approved'
+       WHERE sw.user_id = $1 AND w.status = 'approved' AND w.visibility = 'public'
        GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
                 w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue
        ORDER BY MAX(sw.created_at) DESC`,
@@ -425,7 +444,7 @@ export async function getPersonalSky(anonymousId: string): Promise<PersonalSkyDa
        JOIN wish_lights wl ON w.id = wl.wish_id
        LEFT JOIN stars s ON w.id = s.wish_id
        LEFT JOIN wish_lights wl2 ON w.id = wl2.wish_id
-       WHERE wl.user_id = $1 AND w.status = 'approved'
+       WHERE wl.user_id = $1 AND w.status = 'approved' AND w.visibility = 'public'
        GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
                 w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue
        ORDER BY MAX(wl.created_at) DESC`,
@@ -474,7 +493,22 @@ export async function fulfillWish(
       [wishId, trimmedNote]
     );
 
-    return getWishById(wishId);
+    const updatedWish = await client.query(
+      `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+              w.fulfilled_at, w.fulfillment_note,
+              s.x, s.y, s.z, s.size, s.brightness, s.hue,
+              COUNT(wl.id) AS reaction_count
+       FROM wishes w
+       LEFT JOIN stars s ON w.id = s.wish_id
+       LEFT JOIN wish_lights wl ON w.id = wl.wish_id
+       WHERE w.id = $1
+       GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+                w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue`,
+      [wishId]
+    );
+
+    if (updatedWish.rows.length === 0) return undefined;
+    return mapRowToWish(updatedWish.rows[0]);
   } finally {
     client.release();
   }
@@ -494,7 +528,7 @@ export async function getFulfilledWishes(): Promise<Wish[]> {
        FROM wishes w
        LEFT JOIN stars s ON w.id = s.wish_id
        LEFT JOIN wish_lights wl ON w.id = wl.wish_id
-       WHERE w.status = 'approved' AND w.fulfilled_at IS NOT NULL
+       WHERE w.status = 'approved' AND w.visibility = 'public' AND w.fulfilled_at IS NOT NULL
        GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
                 w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue
        ORDER BY w.fulfilled_at DESC`
@@ -524,7 +558,7 @@ export async function listConstellations(): Promise<Constellation[]> {
     const result = await client.query(
       `SELECT category, COUNT(*)::int AS count
        FROM wishes
-       WHERE status = 'approved'
+       WHERE status = 'approved' AND visibility = 'public'
        GROUP BY category
        ORDER BY count DESC`
     );
@@ -571,6 +605,7 @@ export async function getMirrorWishes(wishId: string, limit = 4): Promise<Mirror
        LEFT JOIN wish_lights wl ON w.id = wl.wish_id
        WHERE w.id != $2
          AND w.status = 'approved'
+         AND w.visibility = 'public'
          AND (
            w.search_vector @@ plainto_tsquery('english', $1)
            OR w.category = $3

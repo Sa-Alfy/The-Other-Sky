@@ -1,16 +1,18 @@
-# Project Status — Milestone 5 Complete
+# Project Status — Milestone 5.1 Complete (Privacy Fix & Auth Gap Recorded)
 
 ## Current state
-**Milestone 5: Personal Sky, Constellations, Mirror & Morning Sky**
+**Milestone 5.1: Private-Wish Leak Fix (Critical) & Auth Gap Documentation**
 
-All Phase 5 features specified in the project roadmap are implemented and verified:
+Phase 5 core features are implemented and verified:
 - Migration `003_personal_sky.sql` executed (saved_wishes table, fulfillment_note column, tsvector search).
 - Personal Sky (`/me`) with 3 tabs: My Wishes, Saved Wishes, Light Sent.
 - Morning Sky (`/morning-sky`) celebrating fulfilled wishes and fulfillment notes.
 - Constellations (`/constellations`) grouping wishes across 6 core categories.
 - The Mirror (`/api/mirror` + `MirrorPanel`) for emotional resonance discovery.
 - Wish Detail enhancements: Active Save toggle and Mirror button.
-- 100% test pass rate: 7/7 server tests and 14/14 frontend tests passing. Build & lint clean.
+- **Privacy Fix (Milestone 5.1)**: Closed critical visibility leak where `visibility = 'private'` wishes were leaked across `listWishes`, `getWishById`, `getFulfilledWishes`, `getMirrorWishes`, and `saveWish`. Added regression test suite.
+- **Auth Gap Clarification**: Personal Sky is currently tied to the anonymous session cookie only; there is no account recovery mechanism yet.
+- 100% test pass rate: 8/8 server tests and 15/15 frontend tests passing. Build & lint clean.
 
 ## Detected stack
 - **Frontend**: React 19, TypeScript, Vite, Vitest, Testing Library
@@ -148,7 +150,7 @@ Tested via browser subagent at `http://localhost:5173/`.
 | Semantic `<button>` with `aria-label` on star buttons | ✅ PASS |
 | Zero JS errors in DevTools console | ✅ PASS |
 
-## Milestone 5 Verification Results
+## Milestone 5 & 5.1 Verification Results
 
 All tests run on **2026-09-05** against PostgreSQL 16.1:
 
@@ -162,7 +164,8 @@ All tests run on **2026-09-05** against PostgreSQL 16.1:
 ✔ voluntary wish fulfillment and Morning Sky retrieval
 ✔ constellations list categories with counts and descriptions
 ✔ mirror returns related wishes excluding source wish
-ℹ tests 7 | pass 7 | fail 0
+✔ regression: private wishes do not leak across public queries
+ℹ tests 8 | pass 8 | fail 0
 
 # Frontend tests:
 > cd frontend && npm test
@@ -174,13 +177,13 @@ Tests       15 passed (15)
 
 # Frontend build & lint:
 > cd frontend && npm run build
-✓ built in 849ms (tsc -b passed; no errors)
+✓ built in 207ms (tsc -b passed; no errors)
 
 > cd frontend && npm run lint
 Found 0 warnings and 0 errors.
 ```
 
-### Milestone 5 Feature Verification Checklist
+### Milestone 5 & 5.1 Feature Verification Checklist
 
 | Feature | Endpoint / Component | Result |
 |---|---|---|
@@ -193,19 +196,21 @@ Found 0 warnings and 0 errors.
 | Category Filtering | `GET /api/wishes?category=...` | ✅ PASS |
 | The Mirror | `GET /api/mirror?wishId=...`, `MirrorPanel.tsx` | ✅ PASS |
 | Deep-link Close Fix | URL parameter sync on card close | ✅ PASS |
+| Private-Wish Privacy Guard | `storageDb.ts` query scoping (`visibility = 'public'`) | ✅ PASS |
 
 ## Known limitations
+- Personal Sky is currently tied to the anonymous session cookie only; there is no account recovery mechanism yet.
 - The in-memory primary rate limiter resets when the server restarts; Redis is a production follow-up
 - Admin moderation uses one shared bearer token; no dedicated admin dashboard UI yet
 - Canvas rendering is 2D; WebGL/instancing deferred until star counts justify it
 - Spatial viewport tile queries deferred until wish count exceeds 10k
 
 ## Verification status
-- ✓ Milestone 5 complete and verified
-- ✓ `npm run build` (frontend) — zero TypeScript or build errors (849ms)
+- ✓ Milestone 5.1 complete and verified
+- ✓ `npm run build` (frontend) — zero TypeScript or build errors
 - ✓ `npm run lint` (frontend oxlint) — 0 warnings, 0 errors
 - ✓ `npm test` (frontend Vitest) — 3 files, 15/15 tests pass
-- ✓ `npm test` (server) — 7/7 pass against real PostgreSQL 16.1
+- ✓ `npm test` (server) — 8/8 pass against real PostgreSQL 16.1 (including privacy regression test)
 - ✓ Database migration `003_personal_sky.sql` executed
 - ✓ Full-text search `tsvector` trigger and GIN index active
 

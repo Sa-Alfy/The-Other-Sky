@@ -7,6 +7,7 @@ import {
   getFulfilledWishes,
   getMirrorWishes,
   getPersonalSky,
+  getWishById,
   isSpamLike,
   listConstellations,
   listWishes,
@@ -98,4 +99,59 @@ test('mirror returns related wishes excluding source wish', async () => {
   assert.ok(Array.isArray(mirror.relatedWishes));
   // Source wish must be excluded
   assert.ok(!mirror.relatedWishes.some((w) => w.id === wish1.id));
+});
+
+test('regression: private wishes do not leak across public queries', async () => {
+  const owner = `user-${Date.now()}-priv-owner`;
+  const stranger = `user-${Date.now()}-priv-stranger`;
+
+  // 1. Create private wish
+  const privateWish = await createWish(
+    {
+      text: 'My intimate private reflection and secrets ' + Date.now(),
+      category: 'peace',
+      visibility: 'private',
+    },
+    owner
+  );
+  assert.ok('id' in privateWish);
+  assert.equal(privateWish.visibility, 'private');
+
+  // 2. Must not appear in listWishes()
+  const publicWishes = await listWishes();
+  assert.equal(publicWishes.some((w) => w.id === privateWish.id), false);
+
+  // 3. Must not be retrievable via public getWishById()
+  const retrievedWish = await getWishById(privateWish.id);
+  assert.equal(retrievedWish, undefined);
+
+  // 4. Must not be saveable by stranger (defense in depth)
+  const saveResult = await saveWish(privateWish.id, stranger);
+  assert.equal(saveResult, undefined);
+
+  // 5. Owner can fulfill their private wish
+  const fulfilledPrivate = await fulfillWish(privateWish.id, owner, 'Resolved quietly.');
+  assert.ok(fulfilledPrivate && 'fulfilledAt' in fulfilledPrivate && fulfilledPrivate.fulfilledAt !== null);
+
+  // 6. Must not appear in Morning Sky (getFulfilledWishes)
+  const morningSky = await getFulfilledWishes();
+  assert.equal(morningSky.some((w) => w.id === privateWish.id), false);
+
+  // 7. Create another wish in the same category and test Mirror search
+  const echoWish = await createWish(
+    {
+      text: 'Seeking peace and intimate reflection ' + Date.now(),
+      category: 'peace',
+      visibility: 'public',
+    },
+    stranger
+  );
+  assert.ok('id' in echoWish);
+
+  const mirrorResults = await getMirrorWishes(echoWish.id);
+  assert.equal(mirrorResults.relatedWishes.some((w) => w.id === privateWish.id), false);
+
+  // 8. Owner can still see their own private wish in Personal Sky
+  const ownerSky = await getPersonalSky(owner);
+  assert.ok(ownerSky.ownWishes.some((w) => w.id === privateWish.id));
 });

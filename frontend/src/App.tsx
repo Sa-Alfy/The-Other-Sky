@@ -1,12 +1,16 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { Link, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import './App.css'
 import { GalaxyCanvas, type GalaxyCanvasRef, type Wish } from './components/GalaxyCanvas'
+import { MirrorPanel } from './components/MirrorPanel'
+import { Constellations } from './pages/Constellations'
+import { MorningSky } from './pages/MorningSky'
+import { PersonalSky } from './pages/PersonalSky'
 
 const apiBase = import.meta.env.VITE_API_URL || ''
 
-function App() {
+function GalaxyView() {
   const [wishes, setWishes] = useState<Wish[]>([])
-  const [entered, setEntered] = useState(false)
   const [selectedWish, setSelectedWish] = useState<Wish | null>(null)
   const [draft, setDraft] = useState('')
   const [category, setCategory] = useState('hope')
@@ -15,7 +19,18 @@ function App() {
   const [lightPulse, setLightPulse] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
+  const [showMirror, setShowMirror] = useState(false)
   const galaxyCanvasRef = useRef<GalaxyCanvasRef>(null)
+
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filterCategory = searchParams.get('category')
+  const targetWishId = searchParams.get('wishId')
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // Track if user entered the sky from the landing overlay
+  const [hasEntered, setHasEntered] = useState(location.pathname === '/sky')
 
   const apiCall = async (
     endpoint: string,
@@ -47,11 +62,15 @@ function App() {
     }
   }
 
+  // Load wishes
   useEffect(() => {
     const loadWishes = async () => {
       setIsLoading(true)
       setError(null)
-      const result = await apiCall('/api/wishes')
+      const endpoint = filterCategory
+        ? `/api/wishes?category=${encodeURIComponent(filterCategory)}`
+        : '/api/wishes'
+      const result = await apiCall(endpoint)
       setIsLoading(false)
 
       if (result.ok && Array.isArray(result.data)) {
@@ -62,33 +81,45 @@ function App() {
     }
 
     void loadWishes()
-  }, [])
+  }, [filterCategory])
 
+  // Deep-link selection from ?wishId=
+  useEffect(() => {
+    if (!targetWishId || wishes.length === 0) return
+    const matched = wishes.find((w) => w.id === targetWishId)
+    if (matched && selectedWish?.id !== matched.id) {
+      setTimeout(() => {
+        setSelectedWish(matched)
+        galaxyCanvasRef.current?.recenterOnWish(matched)
+        setHasEntered(true)
+      }, 0)
+    }
+  }, [targetWishId, wishes, selectedWish?.id])
+
+  // Escape key closes modal / card
   useEffect(() => {
     if (!selectedWish) return
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setSelectedWish(null)
+        setShowMirror(false)
       }
     }
-
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [selectedWish])
 
   const handleSelectWish = (wish: Wish | null) => {
     setSelectedWish(wish)
+    setIsSaved(false)
+    setShowMirror(false)
     if (wish) {
       galaxyCanvasRef.current?.recenterOnWish(wish)
     }
   }
 
-  const selectedSummary = selectedWish?.text ?? 'No wish selected yet.'
-
   const handleLight = async () => {
     if (!selectedWish) return
-
     setError(null)
     const result = await apiCall(`/api/wishes/${selectedWish.id}/light`, {
       method: 'POST',
@@ -107,9 +138,27 @@ function App() {
     }
   }
 
+  const handleToggleSave = async () => {
+    if (!selectedWish) return
+    try {
+      if (isSaved) {
+        const res = await apiCall(`/api/wishes/${selectedWish.id}/save`, {
+          method: 'DELETE',
+        })
+        if (res.ok) setIsSaved(false)
+      } else {
+        const res = await apiCall(`/api/wishes/${selectedWish.id}/save`, {
+          method: 'POST',
+        })
+        if (res.ok) setIsSaved(true)
+      }
+    } catch {
+      setError('Could not update saved wish')
+    }
+  }
+
   const handleCreateWish = async (event: FormEvent) => {
     event.preventDefault()
-
     const trimmed = draft.trim()
     if (trimmed.length < 3) {
       setError('Wish must be at least 3 characters')
@@ -137,9 +186,11 @@ function App() {
     }
   }
 
+  const selectedSummary = selectedWish?.text ?? 'No wish selected yet.'
+
   return (
     <div className="app-shell">
-      {!entered ? (
+      {!hasEntered && location.pathname === '/' ? (
         <main className="landing-screen" aria-label="The Other Sky landing screen">
           <div className="landing-glow" aria-hidden="true" />
           <div className="landing-copy">
@@ -151,7 +202,14 @@ function App() {
               Things we still believe might happen.
             </p>
             <div className="landing-actions">
-              <button type="button" className="primary" onClick={() => setEntered(true)}>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  setHasEntered(true)
+                  navigate('/sky')
+                }}
+              >
                 Enter the Sky
               </button>
               <button type="button" className="secondary" onClick={() => setIsComposerOpen(true)}>
@@ -163,11 +221,13 @@ function App() {
       ) : (
         <main className="galaxy-screen" aria-label="The Other Sky galaxy view">
           <div className="sky-overlay" aria-hidden="true" />
+
           {isLoading && (
             <div className="loading-indicator" aria-live="polite">
               <p>Loading the sky...</p>
             </div>
           )}
+
           {error && (
             <div className="error-message" role="alert" aria-live="assertive">
               <p>{error}</p>
@@ -176,12 +236,29 @@ function App() {
               </button>
             </div>
           )}
+
+          {/* Active Category Filter Indicator */}
+          {filterCategory && (
+            <div className="active-filter-banner">
+              <span>Constellation: <strong>{filterCategory}</strong></span>
+              <button
+                type="button"
+                className="clear-filter-btn"
+                onClick={() => setSearchParams({})}
+                aria-label="Show all stars"
+              >
+                Show entire sky ×
+              </button>
+            </div>
+          )}
+
           <GalaxyCanvas
             ref={galaxyCanvasRef}
             wishes={wishes}
             selectedWish={selectedWish}
             onSelectWish={handleSelectWish}
           />
+
           <ul className="sr-only" aria-label="Wishes in the sky">
             {wishes.map((wish) => (
               <li key={wish.id}>
@@ -193,9 +270,24 @@ function App() {
           </ul>
 
           <header className="top-bar">
-            <div>
-              <span className="brand">THE OTHER SKY</span>
+            <div className="brand-group">
+              <Link to="/sky" className="brand" onClick={() => setSearchParams({})}>
+                THE OTHER SKY
+              </Link>
             </div>
+
+            <nav className="top-nav" aria-label="Navigation">
+              <Link to="/constellations" className="nav-link">
+                Constellations
+              </Link>
+              <Link to="/morning-sky" className="nav-link">
+                Morning Sky
+              </Link>
+              <Link to="/me" className="nav-link">
+                Personal Sky
+              </Link>
+            </nav>
+
             <div className="mini-actions">
               <button type="button" className="soft-button" onClick={() => setIsComposerOpen(true)}>
                 Leave a Wish
@@ -212,28 +304,64 @@ function App() {
                 <button
                   type="button"
                   className="wish-close"
-                  onClick={() => setSelectedWish(null)}
+                  onClick={() => {
+                    setSelectedWish(null)
+                    setShowMirror(false)
+                  }}
                   aria-label="Back to the sky"
                 >
                   ×
                 </button>
                 <div className="wish-mark">✦</div>
                 <blockquote>“{selectedSummary}”</blockquote>
+
+                {selectedWish.fulfilledAt && (
+                  <div className="fulfillment-badge">
+                    <span className="fulfilled-tag">✦ Fulfilled</span>
+                    {selectedWish.fulfillmentNote && (
+                      <p className="fulfilled-note">“{selectedWish.fulfillmentNote}”</p>
+                    )}
+                  </div>
+                )}
+
                 <div className="wish-meta">
+                  <span className="category-pill">{selectedWish.category}</span>
+                  <span>•</span>
                   <span>Someone</span>
                   <span>•</span>
                   <span>Recently</span>
                 </div>
+
                 <div className="wish-actions">
                   <button type="button" className="primary" onClick={handleLight}>
                     ✦ Send Light
                   </button>
-                  <button type="button" className="secondary" disabled title="Coming soon">
-                    Save
+                  <button
+                    type="button"
+                    className={`secondary ${isSaved ? 'active-save' : ''}`}
+                    onClick={handleToggleSave}
+                  >
+                    {isSaved ? 'Saved ✓' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`soft-button mirror-toggle ${showMirror ? 'active' : ''}`}
+                    onClick={() => setShowMirror((prev) => !prev)}
+                  >
+                    ✦ Mirror
                   </button>
                 </div>
+
                 <div className="light-count">{selectedWish.reactions} people have sent light.</div>
                 {lightPulse > 0 && <div className="light-pulse" aria-hidden="true" />}
+
+                {showMirror && (
+                  <MirrorPanel
+                    wish={selectedWish}
+                    onSelectWish={handleSelectWish}
+                    onClose={() => setShowMirror(false)}
+                  />
+                )}
               </>
             ) : (
               <>
@@ -295,6 +423,19 @@ function App() {
         </div>
       )}
     </div>
+  )
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<GalaxyView />} />
+      <Route path="/sky" element={<GalaxyView />} />
+      <Route path="/me" element={<PersonalSky />} />
+      <Route path="/morning-sky" element={<MorningSky />} />
+      <Route path="/constellations" element={<Constellations />} />
+      <Route path="/constellations/:slug" element={<Constellations />} />
+    </Routes>
   )
 }
 

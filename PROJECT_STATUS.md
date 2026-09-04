@@ -1,10 +1,16 @@
-# Project Status — Milestone 4 Complete
+# Project Status — Milestone 5 Complete
 
 ## Current state
-**Milestone 4: End-to-End Verification (Postgres + Browser)**
+**Milestone 5: Personal Sky, Constellations, Mirror & Morning Sky**
 
-All pending Milestone 3 verification items are now closed with real evidence.
-Milestone 4 is complete. Phase 5 features (Personal Sky, Constellations, Mirror, Morning Sky) have not started.
+All Phase 5 features specified in the project roadmap are implemented and verified:
+- Migration `003_personal_sky.sql` executed (saved_wishes table, fulfillment_note column, tsvector search).
+- Personal Sky (`/me`) with 3 tabs: My Wishes, Saved Wishes, Light Sent.
+- Morning Sky (`/morning-sky`) celebrating fulfilled wishes and fulfillment notes.
+- Constellations (`/constellations`) grouping wishes across 6 core categories.
+- The Mirror (`/api/mirror` + `MirrorPanel`) for emotional resonance discovery.
+- Wish Detail enhancements: Active Save toggle and Mirror button.
+- 100% test pass rate: 7/7 server tests and 14/14 frontend tests passing. Build & lint clean.
 
 ## Detected stack
 - **Frontend**: React 19, TypeScript, Vite, Vitest, Testing Library

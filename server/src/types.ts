@@ -9,6 +9,8 @@ export type Wish = {
   visibility: WishVisibility;
   createdAt: string;
   updatedAt: string;
+  fulfilledAt?: string | null;
+  fulfillmentNote?: string | null;
   reactions: number;
   x: number;
   y: number;
@@ -26,6 +28,29 @@ export type CreateWishInput = {
   text: string;
   category?: string;
   visibility?: WishVisibility;
+};
+
+export type FulfillWishInput = {
+  note?: string;
+};
+
+export type PersonalSkyData = {
+  ownWishes: Wish[];
+  savedWishes: Wish[];
+  lightedWishes: Wish[];
+};
+
+export type Constellation = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  wishCount: number;
+};
+
+export type MirrorResult = {
+  relatedWishes: Wish[];
+  message: string;
 };
 
 // Database types
@@ -46,6 +71,7 @@ export type DbWish = {
   created_at: string;
   updated_at: string;
   fulfilled_at: string | null;
+  fulfillment_note?: string | null;
 };
 
 export type DbStar = {
@@ -66,4 +92,3 @@ export type DbLight = {
   user_id: string;
   created_at: string;
 };
-

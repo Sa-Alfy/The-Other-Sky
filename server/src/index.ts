@@ -3,7 +3,22 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import express, { Request, Response } from 'express';
 import { z } from 'zod';
-import { addLight, createWish, getModerationQueue, getWishById, listWishes, moderateWish, reportWish } from './storageDb';
+import {
+  addLight,
+  createWish,
+  fulfillWish,
+  getFulfilledWishes,
+  getMirrorWishes,
+  getModerationQueue,
+  getPersonalSky,
+  getWishById,
+  listConstellations,
+  listWishes,
+  moderateWish,
+  reportWish,
+  saveWish,
+  unsaveWish,
+} from './storageDb';
 import { generateAnonymousId, safeErrorMessage } from './utils';
 
 dotenv.config();
@@ -24,6 +39,8 @@ const lightSchema = z.object({
 
 const reportSchema = z.object({ reason: z.string().trim().max(500).optional() });
 const moderationSchema = z.object({ action: z.enum(['approve', 'reject']) });
+const fulfillSchema = z.object({ note: z.string().trim().max(280).optional() });
+
 const sessionCookieName = 'othersky_sid';
 const frontendOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
 const ipBackstop = rateLimit({
@@ -75,9 +92,10 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ success: true, data: { status: 'ok' } });
 });
 
-app.get('/api/wishes', async (_req: Request, res: Response) => {
+app.get('/api/wishes', async (req: Request, res: Response) => {
   try {
-    const wishes = await listWishes();
+    const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+    const wishes = await listWishes(category);
     res.json({ success: true, data: wishes });
   } catch (error) {
     console.error('Error listing wishes:', error);
@@ -183,6 +201,129 @@ app.post('/api/wishes/:id/light', ipBackstop, async (req: Request, res: Response
   }
 });
 
+app.post('/api/wishes/:id/save', async (req: Request, res: Response) => {
+  try {
+    const anonymousId = (req as any).anonymousId as string;
+    const result = await saveWish(req.params.id as string, anonymousId);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Wish not found.' },
+      });
+    }
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error saving wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.delete('/api/wishes/:id/save', async (req: Request, res: Response) => {
+  try {
+    const anonymousId = (req as any).anonymousId as string;
+    const result = await unsaveWish(req.params.id as string, anonymousId);
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error unsaving wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/me/sky', async (req: Request, res: Response) => {
+  try {
+    const anonymousId = (req as any).anonymousId as string;
+    const sky = await getPersonalSky(anonymousId);
+    return res.json({ success: true, data: sky });
+  } catch (error) {
+    console.error('Error getting personal sky:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.post('/api/wishes/:id/fulfill', async (req: Request, res: Response) => {
+  try {
+    const parsed = fulfillSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_REQUEST', message: 'Fulfillment note must be 280 characters or less.' },
+      });
+    }
+
+    const anonymousId = (req as any).anonymousId as string;
+    const result = await fulfillWish(req.params.id as string, anonymousId, parsed.data.note);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Wish not found.' },
+      });
+    }
+
+    if ('error' in result && 'code' in result) {
+      return res.status(403).json({
+        success: false,
+        error: result,
+      });
+    }
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error fulfilling wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/morning-sky', async (_req: Request, res: Response) => {
+  try {
+    const wishes = await getFulfilledWishes();
+    return res.json({ success: true, data: wishes });
+  } catch (error) {
+    console.error('Error loading morning sky:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/constellations', async (_req: Request, res: Response) => {
+  try {
+    const constellations = await listConstellations();
+    return res.json({ success: true, data: constellations });
+  } catch (error) {
+    console.error('Error loading constellations:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/constellations/:slug', async (req: Request, res: Response) => {
+  try {
+    const wishes = await listWishes(req.params.slug as string);
+    return res.json({ success: true, data: wishes });
+  } catch (error) {
+    console.error('Error loading constellation wishes:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/mirror', async (req: Request, res: Response) => {
+  try {
+    const wishId = req.query.wishId;
+    if (typeof wishId !== 'string' || !wishId) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_REQUEST', message: 'wishId query parameter required.' },
+      });
+    }
+
+    const mirror = await getMirrorWishes(wishId);
+    return res.json({ success: true, data: mirror });
+  } catch (error) {
+    console.error('Error loading mirror wishes:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
 app.post('/api/wishes/:id/report', async (req: Request, res: Response) => {
   const parsed = reportSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Report reason was invalid.' } });
@@ -227,4 +368,3 @@ app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
   console.log(`Database: ${process.env.DATABASE_URL ? 'Connected to PostgreSQL' : 'WARNING: DATABASE_URL not set'}`);
 });
-

@@ -1,5 +1,5 @@
 import { query, transaction, getClient } from './db';
-import { CreateWishInput, DbLight, DbStar, DbUser, DbWish, Wish } from './types';
+import { Constellation, CreateWishInput, DbLight, DbStar, DbUser, DbWish, MirrorResult, PersonalSkyData, Wish } from './types';
 import { generateAnonymousId } from './utils';
 
 // Rate limiting store (in-memory for MVP; can be moved to Redis later)
@@ -67,6 +67,8 @@ async function hydrateWish(wish: DbWish, star: DbStar, reactions: number): Promi
     visibility: wish.visibility,
     createdAt: wish.created_at,
     updatedAt: wish.updated_at,
+    fulfilledAt: wish.fulfilled_at ?? null,
+    fulfillmentNote: wish.fulfillment_note ?? null,
     reactions,
     x: Number(star.x),
     y: Number(star.y),
@@ -77,55 +79,66 @@ async function hydrateWish(wish: DbWish, star: DbStar, reactions: number): Promi
   };
 }
 
+function mapRowToWish(row: any): Promise<Wish> {
+  return hydrateWish(
+    {
+      id: row.id,
+      user_id: row.user_id ?? '',
+      text: row.text,
+      category: row.category,
+      status: row.status,
+      visibility: row.visibility,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      fulfilled_at: row.fulfilled_at ?? null,
+      fulfillment_note: row.fulfillment_note ?? null,
+    },
+    {
+      id: '',
+      wish_id: row.id,
+      x: row.x ?? 0.5,
+      y: row.y ?? 0.5,
+      z: row.z ?? 0,
+      size: row.size ?? 1.5,
+      brightness: row.brightness ?? 1.0,
+      hue: row.hue ?? 45,
+      created_at: row.created_at,
+    },
+    Number(row.reaction_count ?? 0)
+  );
+}
+
 /**
- * List all approved wishes with their stars
+ * List all approved wishes with their stars (optionally filtered by category)
  */
-export async function listWishes(): Promise<Wish[]> {
+export async function listWishes(category?: string): Promise<Wish[]> {
   const client = await getClient();
   try {
-    const result = await client.query(
-      `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
-              s.x, s.y, s.z, s.size, s.brightness, s.hue,
-              COUNT(wl.id) AS reaction_count
-       FROM wishes w
-       LEFT JOIN stars s ON w.id = s.wish_id
-       LEFT JOIN wish_lights wl ON w.id = wl.wish_id
-       WHERE w.status = 'approved'
-      GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
-          s.x, s.y, s.z, s.size, s.brightness, s.hue
-       ORDER BY w.created_at DESC
-      `
-    );
+    let sql = `
+      SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+             w.fulfilled_at, w.fulfillment_note,
+             s.x, s.y, s.z, s.size, s.brightness, s.hue,
+             COUNT(wl.id) AS reaction_count
+      FROM wishes w
+      LEFT JOIN stars s ON w.id = s.wish_id
+      LEFT JOIN wish_lights wl ON w.id = wl.wish_id
+      WHERE w.status = 'approved'
+    `;
+    const params: any[] = [];
 
-    return Promise.all(
-      result.rows.map((row: any) =>
-        hydrateWish(
-          {
-            id: row.id,
-            user_id: '',
-            text: row.text,
-            category: row.category,
-            status: row.status,
-            visibility: row.visibility,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            fulfilled_at: null,
-          },
-          {
-            id: '',
-            wish_id: row.id,
-            x: row.x,
-            y: row.y,
-            z: row.z,
-            size: row.size,
-            brightness: row.brightness,
-            hue: row.hue,
-            created_at: row.created_at,
-          },
-          Number(row.reaction_count)
-        )
-      )
-    );
+    if (category) {
+      params.push(category);
+      sql += ` AND w.category = $${params.length}`;
+    }
+
+    sql += `
+      GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+               w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue
+      ORDER BY w.created_at DESC
+    `;
+
+    const result = await client.query(sql, params);
+    return Promise.all(result.rows.map(mapRowToWish));
   } finally {
     client.release();
   }
@@ -139,14 +152,15 @@ export async function getWishById(id: string): Promise<Wish | undefined> {
   try {
     const result = await client.query(
       `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+              w.fulfilled_at, w.fulfillment_note,
               s.x, s.y, s.z, s.size, s.brightness, s.hue,
               COUNT(wl.id) AS reaction_count
        FROM wishes w
        LEFT JOIN stars s ON w.id = s.wish_id
        LEFT JOIN wish_lights wl ON w.id = wl.wish_id
        WHERE w.id = $1 AND w.status = 'approved'
-      GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
-          s.x, s.y, s.z, s.size, s.brightness, s.hue`,
+       GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+                w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue`,
       [id]
     );
 
@@ -154,32 +168,7 @@ export async function getWishById(id: string): Promise<Wish | undefined> {
       return undefined;
     }
 
-    const row = result.rows[0];
-    return hydrateWish(
-      {
-        id: row.id,
-        user_id: '',
-        text: row.text,
-        category: row.category,
-        status: row.status,
-        visibility: row.visibility,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        fulfilled_at: null,
-      },
-      {
-        id: '',
-        wish_id: row.id,
-        x: row.x,
-        y: row.y,
-        z: row.z,
-        size: row.size,
-        brightness: row.brightness,
-        hue: row.hue,
-        created_at: row.created_at,
-      },
-      Number(row.reaction_count)
-    );
+    return mapRowToWish(result.rows[0]);
   } finally {
     client.release();
   }
@@ -221,8 +210,8 @@ export async function createWish(
     const createdAt = new Date().toISOString();
     const wishResult = await client.query(
       `INSERT INTO wishes (user_id, text, category, status, visibility, created_at, updated_at)
-      VALUES ($1, $2, $3, $7, $4, $5, $6)
-       RETURNING id, text, category, status, visibility, created_at, updated_at`,
+       VALUES ($1, $2, $3, $7, $4, $5, $6)
+       RETURNING id, text, category, status, visibility, created_at, updated_at, fulfilled_at, fulfillment_note`,
       [userId, text, input.category ?? 'general', input.visibility ?? 'public', createdAt, createdAt, isSpamLike(text) ? 'flagged' : 'approved']
     );
     const wish = wishResult.rows[0];
@@ -270,7 +259,7 @@ export async function reportWish(wishId: string, anonymousId: string, reason?: s
 
 export async function getModerationQueue(): Promise<Wish[]> {
   const result = await query("SELECT w.*, s.x, s.y, s.z, s.size, s.brightness, s.hue, 0 AS reaction_count FROM wishes w LEFT JOIN stars s ON w.id = s.wish_id WHERE w.status IN ('pending', 'flagged') ORDER BY w.created_at ASC");
-  return Promise.all(result.rows.map((row: any) => hydrateWish(row, { ...row, wish_id: row.id }, Number(row.reaction_count))));
+  return Promise.all(result.rows.map(mapRowToWish));
 }
 
 export async function moderateWish(id: string, action: 'approve' | 'reject'): Promise<Wish | undefined> {
@@ -323,13 +312,15 @@ export async function addLight(
     // Fetch updated wish with new reaction count
     const result = await client.query(
       `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+              w.fulfilled_at, w.fulfillment_note,
               s.x, s.y, s.z, s.size, s.brightness, s.hue,
               COUNT(wl.id) AS reaction_count
        FROM wishes w
        LEFT JOIN stars s ON w.id = s.wish_id
        LEFT JOIN wish_lights wl ON w.id = wl.wish_id
        WHERE w.id = $1
-       GROUP BY w.id, s.id`,
+       GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+                w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue`,
       [wishId]
     );
 
@@ -337,31 +328,267 @@ export async function addLight(
       return undefined;
     }
 
-    const row = result.rows[0];
-    return hydrateWish(
-      {
-        id: row.id,
-        user_id: userId,
-        text: row.text,
-        category: row.category,
-        status: row.status,
-        visibility: row.visibility,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        fulfilled_at: null,
-      },
-      {
-        id: '',
-        wish_id: row.id,
-        x: row.x,
-        y: row.y,
-        z: row.z,
-        size: row.size,
-        brightness: row.brightness,
-        hue: row.hue,
-        created_at: row.created_at,
-      },
-      Number(row.reaction_count)
-    );
+    return mapRowToWish(result.rows[0]);
   });
+}
+
+/**
+ * Save a wish to user's saved collection
+ */
+export async function saveWish(
+  wishId: string,
+  anonymousId: string
+): Promise<{ saved: true } | undefined> {
+  return transaction(async (client) => {
+    const user = await getOrCreateUser(anonymousId);
+    const wishCheck = await client.query("SELECT id FROM wishes WHERE id = $1 AND status = 'approved'", [wishId]);
+    if (wishCheck.rows.length === 0) return undefined;
+
+    await client.query(
+      `INSERT INTO saved_wishes (user_id, wish_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [user.id, wishId]
+    );
+    return { saved: true };
+  });
+}
+
+/**
+ * Unsave a wish from user's saved collection
+ */
+export async function unsaveWish(
+  wishId: string,
+  anonymousId: string
+): Promise<{ saved: false }> {
+  return transaction(async (client) => {
+    const user = await getOrCreateUser(anonymousId);
+    await client.query(
+      `DELETE FROM saved_wishes WHERE user_id = $1 AND wish_id = $2`,
+      [user.id, wishId]
+    );
+    return { saved: false };
+  });
+}
+
+/**
+ * Get Personal Sky for the current session:
+ * - Own wishes created by this user
+ * - Saved wishes
+ * - Lighted wishes
+ */
+export async function getPersonalSky(anonymousId: string): Promise<PersonalSkyData> {
+  const user = await getOrCreateUser(anonymousId);
+  const client = await getClient();
+
+  try {
+    // 1. Own wishes
+    const ownResult = await client.query(
+      `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+              w.fulfilled_at, w.fulfillment_note,
+              s.x, s.y, s.z, s.size, s.brightness, s.hue,
+              COUNT(wl.id) AS reaction_count
+       FROM wishes w
+       LEFT JOIN stars s ON w.id = s.wish_id
+       LEFT JOIN wish_lights wl ON w.id = wl.wish_id
+       WHERE w.user_id = $1 AND w.status != 'rejected'
+       GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+                w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue
+       ORDER BY w.created_at DESC`,
+      [user.id]
+    );
+
+    // 2. Saved wishes
+    const savedResult = await client.query(
+      `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+              w.fulfilled_at, w.fulfillment_note,
+              s.x, s.y, s.z, s.size, s.brightness, s.hue,
+              COUNT(DISTINCT wl.id) AS reaction_count
+       FROM wishes w
+       JOIN saved_wishes sw ON w.id = sw.wish_id
+       LEFT JOIN stars s ON w.id = s.wish_id
+       LEFT JOIN wish_lights wl ON w.id = wl.wish_id
+       WHERE sw.user_id = $1 AND w.status = 'approved'
+       GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+                w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue
+       ORDER BY MAX(sw.created_at) DESC`,
+      [user.id]
+    );
+
+    // 3. Lighted wishes
+    const lightedResult = await client.query(
+      `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+              w.fulfilled_at, w.fulfillment_note,
+              s.x, s.y, s.z, s.size, s.brightness, s.hue,
+              COUNT(DISTINCT wl2.id) AS reaction_count
+       FROM wishes w
+       JOIN wish_lights wl ON w.id = wl.wish_id
+       LEFT JOIN stars s ON w.id = s.wish_id
+       LEFT JOIN wish_lights wl2 ON w.id = wl2.wish_id
+       WHERE wl.user_id = $1 AND w.status = 'approved'
+       GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+                w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue
+       ORDER BY MAX(wl.created_at) DESC`,
+      [user.id]
+    );
+
+    const [ownWishes, savedWishes, lightedWishes] = await Promise.all([
+      Promise.all(ownResult.rows.map(mapRowToWish)),
+      Promise.all(savedResult.rows.map(mapRowToWish)),
+      Promise.all(lightedResult.rows.map(mapRowToWish)),
+    ]);
+
+    return { ownWishes, savedWishes, lightedWishes };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Voluntary wish fulfillment (owner only)
+ */
+export async function fulfillWish(
+  wishId: string,
+  anonymousId: string,
+  note?: string
+): Promise<Wish | { error: string; code: string } | undefined> {
+  const user = await getOrCreateUser(anonymousId);
+  const client = await getClient();
+
+  try {
+    const wishResult = await client.query("SELECT id, user_id FROM wishes WHERE id = $1", [wishId]);
+    if (wishResult.rows.length === 0) return undefined;
+
+    const wish = wishResult.rows[0];
+    if (wish.user_id !== user.id) {
+      return { error: 'You can only fulfill your own wishes.', code: 'FORBIDDEN' };
+    }
+
+    const trimmedNote = note ? note.trim().slice(0, 280) : null;
+    await client.query(
+      `UPDATE wishes
+       SET fulfilled_at = CURRENT_TIMESTAMP,
+           fulfillment_note = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [wishId, trimmedNote]
+    );
+
+    return getWishById(wishId);
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Morning Sky: List fulfilled wishes
+ */
+export async function getFulfilledWishes(): Promise<Wish[]> {
+  const client = await getClient();
+  try {
+    const result = await client.query(
+      `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+              w.fulfilled_at, w.fulfillment_note,
+              s.x, s.y, s.z, s.size, s.brightness, s.hue,
+              COUNT(wl.id) AS reaction_count
+       FROM wishes w
+       LEFT JOIN stars s ON w.id = s.wish_id
+       LEFT JOIN wish_lights wl ON w.id = wl.wish_id
+       WHERE w.status = 'approved' AND w.fulfilled_at IS NOT NULL
+       GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+                w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue
+       ORDER BY w.fulfilled_at DESC`
+    );
+
+    return Promise.all(result.rows.map(mapRowToWish));
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Constellations: Aggregate categories and descriptions
+ */
+const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  hope: 'Quiet beacons reaching toward tomorrow.',
+  love: 'Ties between souls, whispered across distance.',
+  peace: 'Calm waters in the vastness of the dark.',
+  healing: 'The slow mending of what felt broken.',
+  growth: 'Unfolding gently into who we might become.',
+  clarity: 'Moments when the fog lifts and stars shine through.',
+};
+
+export async function listConstellations(): Promise<Constellation[]> {
+  const client = await getClient();
+  try {
+    const result = await client.query(
+      `SELECT category, COUNT(*)::int AS count
+       FROM wishes
+       WHERE status = 'approved'
+       GROUP BY category
+       ORDER BY count DESC`
+    );
+
+    return result.rows.map((row) => ({
+      id: row.category,
+      name: row.category.charAt(0).toUpperCase() + row.category.slice(1),
+      slug: row.category.toLowerCase(),
+      description: CATEGORY_DESCRIPTIONS[row.category.toLowerCase()] ?? 'Strangers connected by a shared human journey.',
+      wishCount: row.count,
+    }));
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Mirror: Find emotionally related wishes using tsvector + category matching
+ */
+export async function getMirrorWishes(wishId: string, limit = 4): Promise<MirrorResult> {
+  const client = await getClient();
+  try {
+    // 1. Get source wish
+    const sourceResult = await client.query(
+      "SELECT id, text, category FROM wishes WHERE id = $1 AND status = 'approved'",
+      [wishId]
+    );
+
+    if (sourceResult.rows.length === 0) {
+      return { relatedWishes: [], message: 'Wish not found.' };
+    }
+
+    const source = sourceResult.rows[0];
+
+    // 2. Full-text search match using plainto_tsquery on source text
+    const searchResult = await client.query(
+      `SELECT w.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+              w.fulfilled_at, w.fulfillment_note,
+              s.x, s.y, s.z, s.size, s.brightness, s.hue,
+              COUNT(wl.id) AS reaction_count,
+              ts_rank(w.search_vector, plainto_tsquery('english', $1)) AS rank
+       FROM wishes w
+       LEFT JOIN stars s ON w.id = s.wish_id
+       LEFT JOIN wish_lights wl ON w.id = wl.wish_id
+       WHERE w.id != $2
+         AND w.status = 'approved'
+         AND (
+           w.search_vector @@ plainto_tsquery('english', $1)
+           OR w.category = $3
+         )
+       GROUP BY w.id, s.id, w.text, w.category, w.status, w.visibility, w.created_at, w.updated_at,
+                w.fulfilled_at, w.fulfillment_note, s.x, s.y, s.z, s.size, s.brightness, s.hue
+       ORDER BY rank DESC, (w.category = $3) DESC, w.created_at DESC
+       LIMIT $4`,
+      [source.text, wishId, source.category, limit]
+    );
+
+    const relatedWishes = await Promise.all(searchResult.rows.map(mapRowToWish));
+
+    return {
+      relatedWishes,
+      message: "You're not the only one.",
+    };
+  } finally {
+    client.release();
+  }
 }

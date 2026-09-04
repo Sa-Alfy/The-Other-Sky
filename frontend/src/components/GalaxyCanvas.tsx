@@ -19,6 +19,8 @@ export interface Wish {
   status: string
   visibility: string
   createdAt: string
+  fulfilledAt?: string | null
+  fulfillmentNote?: string | null
   reactions: number
   x: number
   y: number

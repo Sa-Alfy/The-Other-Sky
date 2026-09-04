@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, test } from 'vitest'
 import App from './App'
@@ -102,4 +102,44 @@ test('constellations page renders constellations grid and chips', async () => {
   expect(await screen.findByRole('heading', { name: 'Constellations' })).toBeInTheDocument()
   expect(await screen.findByText('Hope')).toBeInTheDocument()
   expect(await screen.findByText('Peace')).toBeInTheDocument()
+})
+
+test('closing a deep-linked wish card closes the card without re-opening', async () => {
+  const sampleWish = {
+    id: 'test-wish-1',
+    text: 'I wish for starlight',
+    category: 'hope',
+    status: 'approved',
+    visibility: 'public',
+    createdAt: '2026-09-01T00:00:00Z',
+    reactions: 5,
+    x: 0.5,
+    y: 0.5,
+    z: 0,
+    size: 1.5,
+    brightness: 1,
+    hue: 45,
+  }
+
+  const prevFetch = globalThis.fetch
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response(JSON.stringify({ success: true, data: [sampleWish] }), { status: 200 })
+    )) as typeof fetch
+
+  render(
+    <MemoryRouter initialEntries={['/sky?wishId=test-wish-1']}>
+      <App />
+    </MemoryRouter>
+  )
+
+  expect(await screen.findByText('“I wish for starlight”')).toBeInTheDocument()
+
+  const closeButton = screen.getByRole('button', { name: 'Back to the sky' })
+  closeButton.click()
+
+  expect(await screen.findByText('Select a star in the sky.')).toBeInTheDocument()
+  expect(screen.queryByText('“I wish for starlight”')).not.toBeInTheDocument()
+
+  globalThis.fetch = prevFetch
 })

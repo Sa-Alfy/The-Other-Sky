@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import './App.css'
 import { GalaxyCanvas, type GalaxyCanvasRef, type Wish } from './components/GalaxyCanvas'
@@ -83,31 +83,49 @@ function GalaxyView() {
     void loadWishes()
   }, [filterCategory])
 
+  const lastTargetWishIdRef = useRef<string | null>(null)
+
   // Deep-link selection from ?wishId=
   useEffect(() => {
-    if (!targetWishId || wishes.length === 0) return
+    if (!targetWishId) {
+      lastTargetWishIdRef.current = null
+      return
+    }
+    if (wishes.length === 0) return
+    if (lastTargetWishIdRef.current === targetWishId) return
+
     const matched = wishes.find((w) => w.id === targetWishId)
-    if (matched && selectedWish?.id !== matched.id) {
+    if (matched) {
+      lastTargetWishIdRef.current = targetWishId
       setTimeout(() => {
         setSelectedWish(matched)
         galaxyCanvasRef.current?.recenterOnWish(matched)
         setHasEntered(true)
       }, 0)
     }
-  }, [targetWishId, wishes, selectedWish?.id])
+  }, [targetWishId, wishes])
+
+  const handleCloseWish = useCallback(() => {
+    setSelectedWish(null)
+    setShowMirror(false)
+    if (searchParams.has('wishId')) {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('wishId')
+      setSearchParams(nextParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   // Escape key closes modal / card
   useEffect(() => {
     if (!selectedWish) return
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setSelectedWish(null)
-        setShowMirror(false)
+        handleCloseWish()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedWish])
+  }, [selectedWish, handleCloseWish])
 
   const handleSelectWish = (wish: Wish | null) => {
     setSelectedWish(wish)
@@ -115,6 +133,8 @@ function GalaxyView() {
     setShowMirror(false)
     if (wish) {
       galaxyCanvasRef.current?.recenterOnWish(wish)
+    } else {
+      handleCloseWish()
     }
   }
 
@@ -304,10 +324,7 @@ function GalaxyView() {
                 <button
                   type="button"
                   className="wish-close"
-                  onClick={() => {
-                    setSelectedWish(null)
-                    setShowMirror(false)
-                  }}
+                  onClick={handleCloseWish}
                   aria-label="Back to the sky"
                 >
                   ×

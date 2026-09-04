@@ -1,6 +1,7 @@
 import { query, transaction, getClient } from './db';
 import { Constellation, CreateWishInput, DbLight, DbStar, DbUser, DbWish, MirrorResult, PersonalSkyData, Wish } from './types';
 import { generateAnonymousId } from './utils';
+import { generateRecoveryPhrase, hashRecoveryPhrase, verifyRecoveryPhrase } from './recovery';
 
 // Rate limiting store (in-memory for MVP; can be moved to Redis later)
 const rateLimitStore = new Map<
@@ -51,7 +52,7 @@ async function getOrCreateUser(anonymousId: string): Promise<DbUser> {
      VALUES ($1, CURRENT_TIMESTAMP) 
      ON CONFLICT (anonymous_id) 
      DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP 
-     RETURNING id, anonymous_id, created_at, last_seen_at`,
+     RETURNING id, anonymous_id, created_at, last_seen_at, recovery_key_hash`,
     [anonymousId]
   );
 
@@ -457,7 +458,12 @@ export async function getPersonalSky(anonymousId: string): Promise<PersonalSkyDa
       Promise.all(lightedResult.rows.map(mapRowToWish)),
     ]);
 
-    return { ownWishes, savedWishes, lightedWishes };
+    return {
+      ownWishes,
+      savedWishes,
+      lightedWishes,
+      hasRecoveryPhrase: Boolean(user.recovery_key_hash),
+    };
   } finally {
     client.release();
   }
@@ -627,3 +633,71 @@ export async function getMirrorWishes(wishId: string, limit = 4): Promise<Mirror
     client.release();
   }
 }
+
+/**
+ * Generate and store a new recovery phrase hash for an anonymous identity.
+ * Rejects if user already has a phrase generated.
+ */
+export async function createRecoveryPhrase(
+  anonymousId: string
+): Promise<{ phrase: string } | { error: string; code: string }> {
+  const user = await getOrCreateUser(anonymousId);
+  if (user.recovery_key_hash) {
+    return {
+      error: 'A recovery phrase has already been generated for this Personal Sky.',
+      code: 'CONFLICT',
+    };
+  }
+
+  const phrase = generateRecoveryPhrase();
+  const hash = await hashRecoveryPhrase(phrase);
+
+  await query(
+    `UPDATE users
+     SET recovery_key_hash = $1,
+         last_seen_at = CURRENT_TIMESTAMP
+     WHERE id = $2`,
+    [hash, user.id]
+  );
+
+  return { phrase };
+}
+
+/**
+ * Recover a user session using a plaintext 4-word recovery phrase.
+ * Note: A full-table bcrypt comparison loop is acceptable at this stage given current expected scale,
+ * but will not scale past a few thousand recovery-enabled users and would need a different scheme
+ * (e.g. keyed lookup by a non-secret prefix or hash index) later.
+ */
+export async function recoverUserByPhrase(phrase: string): Promise<DbUser | null> {
+  if (!phrase || typeof phrase !== 'string') {
+    return null;
+  }
+
+  const client = await getClient();
+  try {
+    const result = await client.query(
+      `SELECT id, anonymous_id, created_at, last_seen_at, recovery_key_hash
+       FROM users
+       WHERE recovery_key_hash IS NOT NULL`
+    );
+
+    for (const row of result.rows) {
+      if (row.recovery_key_hash) {
+        const matches = await verifyRecoveryPhrase(phrase, row.recovery_key_hash);
+        if (matches) {
+          await client.query(
+            `UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            [row.id]
+          );
+          return row;
+        }
+      }
+    }
+
+    return null;
+  } finally {
+    client.release();
+  }
+}
+

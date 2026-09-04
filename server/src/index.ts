@@ -18,6 +18,8 @@ import {
   reportWish,
   saveWish,
   unsaveWish,
+  createRecoveryPhrase,
+  recoverUserByPhrase,
 } from './storageDb';
 import { generateAnonymousId, safeErrorMessage } from './utils';
 
@@ -40,15 +42,27 @@ const lightSchema = z.object({
 const reportSchema = z.object({ reason: z.string().trim().max(500).optional() });
 const moderationSchema = z.object({ action: z.enum(['approve', 'reject']) });
 const fulfillSchema = z.object({ note: z.string().trim().max(280).optional() });
+const recoverSchema = z.object({ phrase: z.string().trim().min(1, 'Phrase is required') });
 
-const sessionCookieName = 'othersky_sid';
+export const sessionCookieName = 'othersky_sid';
 const frontendOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
-const ipBackstop = rateLimit({
+export const ipBackstop = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 30,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { success: false, error: { code: 'RATE_LIMITED', message: 'Please wait before trying again.' } },
+});
+
+export const recoverRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: 'RATE_LIMITED', message: 'Too many recovery attempts. Please try again later.' },
+  },
 });
 
 function parseCookie(header: string | undefined, name: string): string | undefined {
@@ -70,6 +84,11 @@ app.use(express.json({ limit: '1mb' }));
 
 // Session middleware: get or create anonymous ID
 app.use((req: Request, res: Response, next) => {
+  if (req.path === '/api/me/recover') {
+    next();
+    return;
+  }
+
   let anonymousId = parseCookie(req.header('cookie'), sessionCookieName);
 
   if (!anonymousId) {
@@ -242,6 +261,80 @@ app.get('/api/me/sky', async (req: Request, res: Response) => {
   }
 });
 
+app.post('/api/me/recovery-phrase', async (req: Request, res: Response) => {
+  try {
+    const anonymousId = (req as any).anonymousId as string;
+    if (!anonymousId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Session required.' },
+      });
+    }
+
+    const result = await createRecoveryPhrase(anonymousId);
+    if ('error' in result && result.code === 'CONFLICT') {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'CONFLICT', message: result.error },
+      });
+    }
+
+    if ('error' in result) {
+      return res.status(400).json({
+        success: false,
+        error: { code: result.code, message: result.error },
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      data: { phrase: result.phrase },
+    });
+  } catch (error) {
+    console.error('Error generating recovery phrase:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.post('/api/me/recover', recoverRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const parsed = recoverSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Invalid recovery phrase.' },
+      });
+    }
+
+    const user = await recoverUserByPhrase(parsed.data.phrase);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Invalid recovery phrase.' },
+      });
+    }
+
+    // Issue session cookie bound to the recovered user identity
+    res.cookie(sessionCookieName, user.anonymous_id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 365,
+      path: '/',
+    });
+
+    (req as any).anonymousId = user.anonymous_id;
+
+    return res.json({
+      success: true,
+      data: { recovered: true },
+    });
+  } catch (error) {
+    console.error('Error recovering identity:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
 app.post('/api/wishes/:id/fulfill', async (req: Request, res: Response) => {
   try {
     const parsed = fulfillSchema.safeParse(req.body);
@@ -364,7 +457,13 @@ app.use((_req: Request, res: Response) => {
 });
 
 // Start server
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-  console.log(`Database: ${process.env.DATABASE_URL ? 'Connected to PostgreSQL' : 'WARNING: DATABASE_URL not set'}`);
-});
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+    console.log(`Database: ${process.env.DATABASE_URL ? 'Connected to PostgreSQL' : 'WARNING: DATABASE_URL not set'}`);
+  });
+}
+
+export default app;
+export { app };
+

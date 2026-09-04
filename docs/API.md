@@ -323,6 +323,77 @@ All responses follow a consistent JSON structure:
 
 ---
 
+### POST /api/me/recovery-phrase
+**Purpose:** Generate a one-time 4-word cryptographic recovery phrase for the caller's anonymous identity. Plaintext phrase is returned only once and never logged or retrievable again.
+
+**Headers:**
+- Cookie: `othersky_sid=<session_token>` (required)
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "data": {
+    "phrase": "dawn-lantern-cedar-fable"
+  }
+}
+```
+
+**Conflict (409 Conflict):**
+Returned if the session already has an active recovery phrase:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "CONFLICT",
+    "message": "A recovery phrase has already been generated for this Personal Sky."
+  }
+}
+```
+
+**Status codes:** 201, 401, 409, 500
+
+---
+
+### POST /api/me/recover
+**Purpose:** Reattach an existing anonymous identity and Personal Sky to a new browser/session using the 4-word recovery phrase.
+
+**Rate limit:** 5 attempts per IP per hour (`429 Too Many Requests`).
+
+**Request Body:**
+```json
+{
+  "phrase": "dawn-lantern-cedar-fable"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "recovered": true
+  }
+}
+```
+*Note: Sets the `othersky_sid` HTTP-only cookie to the matched user's identity.*
+
+**Error response (401 Unauthorized):**
+Generic message returned for any invalid, unknown, or malformed phrase to prevent attacker enumeration:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Invalid recovery phrase."
+  }
+}
+```
+
+**Status codes:** 200, 401, 429, 500
+
+---
+
 ## Client Implementation Example
 
 ### React/TypeScript

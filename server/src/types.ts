@@ -38,6 +38,7 @@ export type PersonalSkyData = {
   ownWishes: Wish[];
   savedWishes: Wish[];
   lightedWishes: Wish[];
+  hasRecoveryPhrase: boolean;
 };
 
 export type Constellation = {
@@ -59,6 +60,7 @@ export type DbUser = {
   anonymous_id: string;
   created_at: string;
   last_seen_at: string;
+  recovery_key_hash?: string | null;
 };
 
 export type DbWish = {

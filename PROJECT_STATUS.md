@@ -1,18 +1,16 @@
-# Project Status — Milestone 5.1 Complete (Privacy Fix & Auth Gap Recorded)
+# Project Status — Milestone 5.2 Complete (Personal Sky Recovery Phrase)
 
 ## Current state
-**Milestone 5.1: Private-Wish Leak Fix (Critical) & Auth Gap Documentation**
+**Milestone 5.2: Personal Sky Recovery Phrase (Cryptographic Option 1)**
 
-Phase 5 core features are implemented and verified:
-- Migration `003_personal_sky.sql` executed (saved_wishes table, fulfillment_note column, tsvector search).
-- Personal Sky (`/me`) with 3 tabs: My Wishes, Saved Wishes, Light Sent.
-- Morning Sky (`/morning-sky`) celebrating fulfilled wishes and fulfillment notes.
-- Constellations (`/constellations`) grouping wishes across 6 core categories.
-- The Mirror (`/api/mirror` + `MirrorPanel`) for emotional resonance discovery.
-- Wish Detail enhancements: Active Save toggle and Mirror button.
-- **Privacy Fix (Milestone 5.1)**: Closed critical visibility leak where `visibility = 'private'` wishes were leaked across `listWishes`, `getWishById`, `getFulfilledWishes`, `getMirrorWishes`, and `saveWish`. Added regression test suite.
-- **Auth Gap Clarification**: Personal Sky is currently tied to the anonymous session cookie only; there is no account recovery mechanism yet.
-- 100% test pass rate: 8/8 server tests and 15/15 frontend tests passing. Build & lint clean.
+Features implemented and verified:
+- Migration `004_recovery_phrase.sql` executed (`recovery_key_hash` column and unique partial index on `users`).
+- 2048-word list (44 bits entropy for 4-word phrase: `word-word-word-word`).
+- Secure generation with Node `crypto.randomInt` and bcrypt-12 hashing. Plaintext phrase never stored or logged.
+- `POST /api/me/recovery-phrase`: opt-in, one-time generation with 409 Conflict guard against duplicate generation.
+- `POST /api/me/recover`: reattaches anonymous identity and reissues session cookie. Rate-limited to 5 attempts/hour/IP (HTTP 429 on 6th attempt).
+- Frontend UI in `PersonalSky.tsx`: "Protect this sky" button, modal with phrase, one-click copy, unambiguous warning copy, checkbox gating "Done" button, and "Already have a sky? Recover it" recovery entry point.
+- 100% test pass rate: 15/15 server tests and 22/22 frontend tests passing. Build & lint clean.
 
 ## Detected stack
 - **Frontend**: React 19, TypeScript, Vite, Vitest, Testing Library

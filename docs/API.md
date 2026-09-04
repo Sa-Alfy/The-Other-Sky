@@ -400,12 +400,130 @@ Both endpoints are rate-limited per anonymous user:
 
 ---
 
+## Milestone 5 Endpoints
+
+### POST /api/wishes/:id/save
+**Purpose:** Save a wish to the current anonymous session's private collection.
+
+**Status codes:**
+- `200` — Wish successfully saved: `{"success": true, "data": {"saved": true}}`
+- `404` — Wish not found
+
+---
+
+### DELETE /api/wishes/:id/save
+**Purpose:** Remove a saved wish from the current anonymous session's collection.
+
+**Status codes:**
+- `200` — Wish successfully unsaved: `{"success": true, "data": {"saved": false}}`
+
+---
+
+### GET /api/me/sky
+**Purpose:** Retrieve the Personal Sky for the current session.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "ownWishes": [ ... ],
+    "savedWishes": [ ... ],
+    "lightedWishes": [ ... ]
+  }
+}
+```
+
+---
+
+### POST /api/wishes/:id/fulfill
+**Purpose:** Voluntarily mark a wish as fulfilled (restricted to the original creator).
+
+**Request Body:**
+```json
+{
+  "note": "Optional reflection about what happened (max 280 chars)"
+}
+```
+
+**Status codes:**
+- `200` — Wish marked as fulfilled; returns updated Wish object
+- `403` — Forbidden: requestor is not the creator of this wish
+- `404` — Wish not found
+
+---
+
+### GET /api/morning-sky
+**Purpose:** Retrieve all approved wishes that have been fulfilled, ordered by fulfillment date descending.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "text": "I hope tomorrow is gentler.",
+      "fulfilledAt": "2026-09-04T12:00:00.000Z",
+      "fulfillmentNote": "It is finally on the wall.",
+      ...
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/constellations
+**Purpose:** Retrieve all constellations (categories) with connected star counts and descriptions.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "hope",
+      "name": "Hope",
+      "slug": "hope",
+      "description": "Quiet beacons reaching toward tomorrow.",
+      "wishCount": 18
+    }, ...
+  ]
+}
+```
+
+---
+
+### GET /api/constellations/:slug
+**Purpose:** Retrieve all approved wishes belonging to a specific constellation category.
+
+---
+
+### GET /api/mirror?wishId=:id
+**Purpose:** Discover emotionally resonant wishes similar to the given wish using PostgreSQL full-text search (`tsvector` + `plainto_tsquery`) and category fallback.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "relatedWishes": [ ... ],
+    "message": "You're not the only one."
+  }
+}
+```
+
+---
+
 ## Error Handling
 
 ### HTTP Status Codes
 - `200` — Success
 - `201` — Created (POST /api/wishes)
 - `400` — Bad request (validation failed)
+- `401` — Unauthorized (admin endpoints)
+- `403` — Forbidden (e.g. attempting to fulfill someone else's wish)
 - `404` — Not found
 - `429` — Too many requests (rate limited)
 - `500` — Server error
@@ -435,11 +553,13 @@ Both endpoints are rate-limited per anonymous user:
 type Wish = {
   id: string                    // UUID
   text: string                  // 3–280 chars, plain text
-  category: string              // e.g., "hope", "love"
+  category: string              // e.g., "hope", "love", "peace", "healing", "growth", "clarity"
   status: 'approved' | 'pending' | 'rejected' | 'flagged'
   visibility: 'public' | 'private'
   createdAt: string             // ISO 8601 timestamp
   updatedAt: string             // ISO 8601 timestamp
+  fulfilledAt?: string | null   // ISO 8601 timestamp when marked fulfilled
+  fulfillmentNote?: string | null // Optional user reflection on fulfillment (max 280 chars)
   reactions: number             // Count of unique Send Light interactions
   x: number                     // 0.0 to 1.0 (normalized)
   y: number                     // 0.0 to 1.0 (normalized)
@@ -452,22 +572,6 @@ type Wish = {
 
 ---
 
-## Future Enhancements
+**Last Updated:** Milestone 5  
+**Version:** 2.0
 
-**Not implemented in MVP:**
-- Pagination
-- Filtering by category
-- Sorting options
-- Search
-- Authentication
-- User profiles
-- Following/followers
-- Comments
-- Edits/deletes
-
-These will be introduced in later milestones if the product direction calls for them.
-
----
-
-**Last Updated:** Milestone 2  
-**Version:** 1.0

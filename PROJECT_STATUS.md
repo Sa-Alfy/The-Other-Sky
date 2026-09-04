@@ -148,68 +148,69 @@ Tested via browser subagent at `http://localhost:5173/`.
 | Semantic `<button>` with `aria-label` on star buttons | ✅ PASS |
 | Zero JS errors in DevTools console | ✅ PASS |
 
-## Known limitations (unchanged from Milestone 3)
+## Milestone 5 Verification Results
+
+All tests run on **2026-09-05** against PostgreSQL 16.1:
+
+```
+# Server tests:
+> cd server && npm test
+✔ spam screening flags obvious URLs and flooding
+✔ rate limiting blocks the sixth wish for one identity
+✔ rate-limit buckets are independent per identity
+✔ save and unsave wish updates saved collection
+✔ voluntary wish fulfillment and Morning Sky retrieval
+✔ constellations list categories with counts and descriptions
+✔ mirror returns related wishes excluding source wish
+ℹ tests 7 | pass 7 | fail 0
+
+# Frontend tests:
+> cd frontend && npm test
+Test Files  3 passed (3)
+Tests       15 passed (15)
+- App.test.tsx (6 tests)
+- GalaxyCanvas.test.tsx (2 tests)
+- starColors.test.ts (7 tests)
+
+# Frontend build & lint:
+> cd frontend && npm run build
+✓ built in 849ms (tsc -b passed; no errors)
+
+> cd frontend && npm run lint
+Found 0 warnings and 0 errors.
+```
+
+### Milestone 5 Feature Verification Checklist
+
+| Feature | Endpoint / Component | Result |
+|---|---|---|
+| Personal Sky (`/me`) | `GET /api/me/sky`, `PersonalSky.tsx` | ✅ PASS |
+| Save Wish | `POST /api/wishes/:id/save` | ✅ PASS |
+| Unsave Wish | `DELETE /api/wishes/:id/save` | ✅ PASS |
+| Voluntary Fulfillment | `POST /api/wishes/:id/fulfill` | ✅ PASS |
+| Morning Sky (`/morning-sky`) | `GET /api/morning-sky`, `MorningSky.tsx` | ✅ PASS |
+| Constellations | `GET /api/constellations`, `Constellations.tsx` | ✅ PASS |
+| Category Filtering | `GET /api/wishes?category=...` | ✅ PASS |
+| The Mirror | `GET /api/mirror?wishId=...`, `MirrorPanel.tsx` | ✅ PASS |
+| Deep-link Close Fix | URL parameter sync on card close | ✅ PASS |
+
+## Known limitations
 - The in-memory primary rate limiter resets when the server restarts; Redis is a production follow-up
-- Admin moderation uses one shared bearer token; no admin UI yet
+- Admin moderation uses one shared bearer token; no dedicated admin dashboard UI yet
 - Canvas rendering is 2D; WebGL/instancing deferred until star counts justify it
-- Pagination and spatial loading are not yet implemented
-- No accounts, personal sky, constellations, categories filtering, Mirror, or Morning Sky yet
+- Spatial viewport tile queries deferred until wish count exceeds 10k
 
 ## Verification status
-- ✓ Milestone 3.1 build/test fixes committed (commit `9db838a`)
-- ✓ `npm run build` (frontend) — zero TypeScript or build errors
+- ✓ Milestone 5 complete and verified
+- ✓ `npm run build` (frontend) — zero TypeScript or build errors (849ms)
 - ✓ `npm run lint` (frontend oxlint) — 0 warnings, 0 errors
-- ✓ Milestone 3.4 clean frontend install — plain `npm install` succeeds with `@testing-library/dom@10.4.1`
-- ✓ `npm test` (frontend Vitest) — 3 files, 10/10 tests pass
-- ✓ `npm test` (server) — 3/3 pass against real PostgreSQL 16.1
-- ✓ Cookie rate-limit buckets — independently enforced, 5-wish cap confirmed
-- ✓ Duplicate light — idempotent via DB unique constraint
-- ✓ Spam screening — URL and flood patterns auto-flagged, excluded from public list
-- ✓ Report threshold — 3 unique reporters flag a wish (1 and 2 do not)
-- ✓ Admin auth — 401 without token, 200 with correct Bearer token
-- ✓ Admin moderate — approve/reject changes wish status and public visibility
-- ✓ Browser UI — landing, galaxy canvas, keyboard nav, wish panel, wish form all work
-- ✓ Browser accessibility — semantic HTML, aria-labels on buttons, zero console errors
-
-### Milestone 3.4 — Clean-install pipeline
-
-Verified on 2026-09-04 from fresh dependency directories:
-
-```text
-frontend: npm install, npm run build, npm run lint, npm test — all passed
-server:   npm install, npm run build, npm test — all passed
-```
-
-The frontend fix adds `@testing-library/dom` as a devDependency for the Testing
-Library peer requirements. No Vitest version change or `.npmrc` workaround was needed; plain `npm install` completed successfully.
-needed; plain `npm install` completed successfully.
-
-Frontend canvas tests still print jsdom `HTMLCanvasElement.getContext()`
-not-implemented warnings. Those tests verify mounting and non-throwing behavior,
-not real canvas rendering or interaction; browser verification remains the source
-of truth for those behaviors.
-
-## How to run
-
-```bash
-# Start PostgreSQL (if not already running)
-C:\pg16\pgsql\bin\postgres.exe -D C:\pg16\data
-
-# In server/
-npm install
-npm run db:migrate
-npm run db:seed
-npm start          # or: npm run dev
-
-# In frontend/
-npm install
-npm run dev
-```
-
-Set `ADMIN_TOKEN` in `server/.env` for admin endpoints. Set `FRONTEND_ORIGIN` when the frontend is not at `http://localhost:5173`.
+- ✓ `npm test` (frontend Vitest) — 3 files, 15/15 tests pass
+- ✓ `npm test` (server) — 7/7 pass against real PostgreSQL 16.1
+- ✓ Database migration `003_personal_sky.sql` executed
+- ✓ Full-text search `tsvector` trigger and GIN index active
 
 ## Next implementation milestone
-**Milestone 5 — Phase 5 product features**
-
-Milestone 4 verification is signed off. The next work follows the project specification:
-Personal Sky, Constellations, Mirror, and Morning Sky features.
+**Milestone 6 — Semantic Clustering, Spatial Loading & Admin UI**
+- Semantic embeddings for advanced constellation boundaries
+- Viewport bounding-box queries (`GET /api/galaxy?centerX=...`)
+- Dedicated administrative moderation dashboard UI

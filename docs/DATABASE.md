@@ -118,6 +118,57 @@ The API returns the updated wish with the current reaction count, so the UX feel
 
 ---
 
+### `saved_wishes` Table
+Stores private saved wishes per anonymous user session (Milestone 5).
+
+```sql
+CREATE TABLE saved_wishes (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  wish_id UUID NOT NULL REFERENCES wishes(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, wish_id)
+);
+```
+
+**Key Feature:** The composite primary key `(user_id, wish_id)` guarantees uniqueness and fast lookup for a user's Personal Sky saved collection.
+
+---
+
+### `moderation_events` Table
+Tracks moderation actions, automated flags, user reports, and administrative decisions.
+
+```sql
+CREATE TABLE moderation_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  wish_id UUID NOT NULL REFERENCES wishes(id) ON DELETE CASCADE,
+  action VARCHAR(30) NOT NULL,
+  reason_code VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  reviewer_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  metadata JSONB
+);
+```
+
+---
+
+## Full-Text Search (The Mirror)
+
+The `wishes` table includes a `search_vector` column of type `tsvector` with a GIN index:
+
+```sql
+ALTER TABLE wishes ADD COLUMN search_vector tsvector;
+CREATE INDEX idx_wishes_search_vector ON wishes USING GIN(search_vector);
+```
+
+A PostgreSQL trigger automatically keeps `search_vector` updated upon insert or update:
+```sql
+to_tsvector('english', COALESCE(NEW.text, '') || ' ' || COALESCE(NEW.category, ''))
+```
+
+This powers **The Mirror** (`/api/mirror`) using `plainto_tsquery('english', query)` to calculate emotional similarity ranks without requiring external AI service dependencies.
+
+---
+
 ## Local Development Setup
 
 ### Prerequisites

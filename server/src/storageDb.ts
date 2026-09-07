@@ -2,6 +2,7 @@ import { query, transaction, getClient } from './db';
 import { Constellation, CreateWishInput, DbLight, DbStar, DbUser, DbWish, MirrorResult, PersonalSkyData, Wish } from './types';
 import { generateAnonymousId } from './utils';
 import { generateRecoveryPhrase, hashRecoveryPhrase, verifyRecoveryPhrase } from './recovery';
+import { findStarPlacement, generateStarDepth } from './starPlacement';
 
 // Rate limiting store (in-memory for MVP; can be moved to Redis later)
 const rateLimitStore = new Map<
@@ -217,10 +218,23 @@ export async function createWish(
     );
     const wish = wishResult.rows[0];
 
-    // Generate star placement
-    const x = Number((Math.random() * 0.9 + 0.07).toFixed(3));
-    const y = Number((Math.random() * 0.9 + 0.04).toFixed(3));
-    const z = 0;
+    // Fetch existing approved-public star positions for blue-noise placement.
+    // O(n) per insert — acceptable at current scale (few hundred stars);
+    // would need spatial indexing (e.g. a grid or quadtree) past ~5 000 stars.
+    const existingStarsResult = await client.query(
+      `SELECT s.x, s.y
+       FROM stars s
+       INNER JOIN wishes w ON s.wish_id = w.id
+       WHERE w.status = 'approved' AND w.visibility = 'public'`
+    );
+    const existingStars = existingStarsResult.rows.map((r: { x: string; y: string }) => ({
+      x: Number(r.x),
+      y: Number(r.y),
+    }));
+
+    // Blue-noise placement + magnitude-skewed depth layer
+    const { x, y } = findStarPlacement(existingStars);
+    const z = generateStarDepth();
     const size = Number((Math.random() * 1.6 + 1.2).toFixed(2));
     const brightness = Number((Math.random() * 0.5 + 0.8).toFixed(2));
     const hue = Math.floor(Math.random() * 80) + 30;

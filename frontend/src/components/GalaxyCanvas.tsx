@@ -132,13 +132,18 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       const rect = canvas.getBoundingClientRect()
       const cam = cameraRef.current
 
-      // Wish world coordinates
+      // Star world position (in canvas CSS-pixel space)
       const worldX = wish.x * rect.width
       const worldY = wish.y * rect.height
 
-      // Target to center the star in viewport
-      cam.targetX = rect.width / 2 - worldX * cam.targetScale
-      cam.targetY = rect.height / 2 - worldY * cam.targetScale
+      // Invert the parallax render formula to find the camera translation that
+      // places this star at the viewport centre.
+      // Render formula: screenX = cam.X * p(z) + worldX * cam.scale
+      // Solving for cam.X: cam.X = (viewport/2 - worldX * cam.scale) / p(z)
+      const z = wish.z ?? 0.3
+      const pz = 0.65 + z * 0.70
+      cam.targetX = (rect.width / 2 - worldX * cam.targetScale) / pz
+      cam.targetY = (rect.height / 2 - worldY * cam.targetScale) / pz
 
       if (instant || prefersReducedMotionRef.current) {
         cam.currentX = cam.targetX
@@ -211,41 +216,67 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
         ctx.restore()
 
         // ----------------------------------------------------
-        // Layer 2: Main Starfield (Full Camera Pan & Zoom)
+        // Layer 2: Main Starfield — depth-driven parallax & size/brightness
         // ----------------------------------------------------
-        ctx.save()
-        ctx.translate(cam.currentX, cam.currentY)
-        ctx.scale(cam.currentScale, cam.currentScale)
+        // Each star has a depth z ∈ [0.1, 1.0]:
+        //   - z near 0 = far/dim, slow parallax
+        //   - z near 1 = near/bright, fast parallax
+        //
+        // Parallax factor p(z) governs how much of the camera pan each star
+        // inherits. The ambient dust layer uses a fixed 0.35 pan-fraction; wish
+        // stars are distributed across 0.65–1.35 depending on z, bridging
+        // naturally from the dust layer through to a "foreground" feel.
+        //
+        // IMPORTANT — zoom-to-cursor centering is NOT per-star: it operates
+        // purely on cam.currentScale/X/Y (the wheel/pinch handlers touch only
+        // camera state, never any star's z). Near stars visually shift faster
+        // during a pan, but a zoom-toward-cursor always resolves around the
+        // camera pivot — there is no ambiguity between layers.
+        //
+        // The 5px drag-vs-click threshold (handlePointerMove) fires on raw
+        // pointer delta in screen space, before any world or parallax transform,
+        // and is therefore completely unaffected by the parallax model.
 
         const currentWishes = wishesRef.current
         const selWish = selectedWishRef.current
         const hovWishId = hoveredWishIdRef.current
 
         for (const wish of currentWishes) {
-          const wx = wish.x * rect.width
-          const wy = wish.y * rect.height
+          const z = wish.z ?? 0.3
+          // p(z): parallax fraction applied to camera translation
+          // Far stars (z≈0.1) → p≈0.72; near stars (z≈1.0) → p≈1.35
+          const pz = 0.65 + z * 0.70
 
-          // Core radius scaled strictly 1.5px - 3.0px by wish.size
+          // Star screen position: parallax applied to camera translation only.
+          // Camera scale is a single world-space multiplier — zoom-to-cursor
+          // continues to operate on cam.currentScale without any per-star split.
+          const wx = cam.currentX * pz + wish.x * rect.width * cam.currentScale
+          const wy = cam.currentY * pz + wish.y * rect.height * cam.currentScale
+
+          // Depth modulation: near stars slightly larger and brighter (±20-25%)
+          const depthMod = 0.78 + 0.44 * z // 0.78 at z=0.1 → 1.22 at z=1.0
+
+          // Core radius modulated by depth as well as wish.size
           const clampedSize = Math.max(0.8, Math.min(2.5, wish.size))
-          const coreRadius = 1.5 + (clampedSize - 0.8) * 0.88 // range ~1.5px - 3.0px
+          const coreRadius = (1.5 + (clampedSize - 0.8) * 0.88) * depthMod
           const glowRadius = coreRadius * 3.5
 
           // Restrained color mapping
           const color = getStarTemperatureColor(wish.hue)
 
-          // Base opacity hierarchy from brightness (0.6 - 1.0)
+          // Base opacity hierarchy from brightness, further modulated by depth
           const clampedBrightness = Math.max(0.5, Math.min(1.5, wish.brightness))
-          const baseOpacity = 0.6 + ((clampedBrightness - 0.5) / 1.0) * 0.4
+          const baseOpacity = (0.6 + ((clampedBrightness - 0.5) / 1.0) * 0.4) * depthMod
 
           // Twinkle animation (skip when reduced motion)
           let twinkleFactor = 0
           if (!reducedMotion) {
             const { phase, period } = getStarTwinkleProps(wish.id)
-            twinkleFactor = Math.sin((time / period) * Math.PI * 2 + phase) * 0.12 // +/- 12%
+            twinkleFactor = Math.sin((time / period) * Math.PI * 2 + phase) * 0.12
           }
           const alpha = Math.max(0.2, Math.min(1.0, baseOpacity * (1 + twinkleFactor)))
 
-          // 1. Soft radial glow only (not oversized flat blur blob)
+          // 1. Soft radial glow
           const glow = ctx.createRadialGradient(wx, wy, coreRadius * 0.4, wx, wy, glowRadius)
           glow.addColorStop(0, `hsla(${color.h}, ${color.s}%, ${color.l}%, ${0.6 * alpha})`)
           glow.addColorStop(0.45, `hsla(${color.h}, ${color.s}%, ${color.l}%, ${0.18 * alpha})`)
@@ -268,16 +299,15 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
           if (isSelected) {
             const pulse = reducedMotion
               ? 0.5
-              : Math.sin((time / 2400) * Math.PI * 2) * 0.5 + 0.5 // 2.4s period
+              : Math.sin((time / 2400) * Math.PI * 2) * 0.5 + 0.5
             const ringRadius = coreRadius + 4.5 + pulse * 2.0
-            const ringOpacity = 0.4 + pulse * 0.35 // 0.4 - 0.75
+            const ringOpacity = 0.4 + pulse * 0.35
             ctx.strokeStyle = `hsla(${color.h}, ${color.s}%, 94%, ${ringOpacity})`
             ctx.lineWidth = 1
             ctx.beginPath()
             ctx.arc(wx, wy, ringRadius, 0, Math.PI * 2)
             ctx.stroke()
           } else if (isHovered) {
-            // Subtle hover indicator ring
             ctx.strokeStyle = `hsla(${color.h}, ${color.s}%, 90%, 0.35)`
             ctx.lineWidth = 1
             ctx.beginPath()
@@ -286,7 +316,6 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
           }
         }
 
-        ctx.restore() // Restore main camera transform
         ctx.restore() // Restore DPR transform
 
         animationFrameId = requestAnimationFrame(render)
@@ -332,34 +361,37 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       return () => canvas.removeEventListener('wheel', onWheel)
     }, [])
 
-    // Hit-test function converting CSS screen coordinates to world coordinates
+    // Hit-test function: computes each star's actual screen position using its
+    // per-star p(z) parallax factor (matching the render loop exactly), then
+    // measures distance in screen pixels. This correctly handles stars at
+    // different depths having different screen positions during a pan.
+    //
+    // NOTE: this function is called only on pointer-up (click) and hover, which
+    // is strictly downstream of the 5px drag-vs-click threshold check — that
+    // check fires on raw pointer delta before any transform.
     const findNearestWishAtScreenPos = (screenX: number, screenY: number): Wish | null => {
       const canvas = canvasRef.current
       if (!canvas) return null
       const rect = canvas.getBoundingClientRect()
       const cam = cameraRef.current
 
-      // Convert screen click into world space:
-      // screenX = worldX * cam.currentScale + cam.currentX
-      // worldX = (screenX - cam.currentX) / cam.currentScale
-      const worldClickX = (screenX - cam.currentX) / cam.currentScale
-      const worldClickY = (screenY - cam.currentY) / cam.currentScale
-
       let nearest: Wish | null = null
       let minDistance = Number.POSITIVE_INFINITY
 
       for (const wish of wishesRef.current) {
-        const wx = wish.x * rect.width
-        const wy = wish.y * rect.height
-        const worldDist = Math.hypot(wx - worldClickX, wy - worldClickY)
+        const z = wish.z ?? 0.3
+        const pz = 0.65 + z * 0.70
+        // Star screen position (mirrors the render loop exactly)
+        const wx = cam.currentX * pz + wish.x * rect.width * cam.currentScale
+        const wy = cam.currentY * pz + wish.y * rect.height * cam.currentScale
 
-        // Screen distance = worldDist * cam.currentScale
+        const screenDist = Math.hypot(wx - screenX, wy - screenY)
+
         // Tolerance in screen pixels: forgiving when zoomed out, tight when zoomed in
         const toleranceScreen = Math.max(22, wish.size * 10)
-        const toleranceWorld = toleranceScreen / cam.currentScale
 
-        if (worldDist <= toleranceWorld && worldDist < minDistance) {
-          minDistance = worldDist
+        if (screenDist <= toleranceScreen && screenDist < minDistance) {
+          minDistance = screenDist
           nearest = wish
         }
       }

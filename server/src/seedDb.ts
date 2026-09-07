@@ -1,4 +1,5 @@
 import { query, closePool, transaction, getClient } from './db';
+import { findStarPlacement, generateStarDepth } from './starPlacement';
 
 const SEED_WISHES = [
   'I hope future me is peaceful.',
@@ -47,14 +48,18 @@ async function seedDatabase() {
 
       // Generate wishes
       let wishCount = 0;
+      const seenStars: Array<{ x: number; y: number }> = [];
       for (let i = 0; i < 72; i++) {
         const text = SEED_WISHES[i % SEED_WISHES.length];
         const category = CATEGORIES[i % CATEGORIES.length];
         const createdAtOffset = -(i + 1) * 1000 * 60 * 24 * 2.7;
         const createdAt = new Date(Date.now() + createdAtOffset);
 
-        const x = (i % 9) / 8 + ((i % 3) * 0.11);
-        const y = (i % 11) / 10 + ((i % 5) * 0.08);
+        // Blue-noise placement: each star avoids all previously seeded stars
+        const { x, y } = findStarPlacement(seenStars);
+        const z = generateStarDepth();
+        seenStars.push({ x, y });
+
         const size = 1.2 + (((i * 7) % 8) / 7);
         const brightness = 0.7 + (((i * 13) % 10) / 10);
         const hue = 35 + ((i * 9) % 80);
@@ -69,9 +74,9 @@ async function seedDatabase() {
 
         // Create star
         await client.query(
-          `INSERT INTO stars (wish_id, x, y, size, brightness, hue, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [wishId, x, y, size, brightness, hue, createdAt]
+          `INSERT INTO stars (wish_id, x, y, z, size, brightness, hue, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [wishId, x, y, z, size, brightness, hue, createdAt]
         );
 
         // Add random light interactions

@@ -1,5 +1,6 @@
 import { mockWishes } from './mockData';
 import { CreateWishInput, Wish } from './types';
+import { findStarPlacement, generateStarDepth } from './starPlacement';
 
 let wishes: Wish[] = [...mockWishes];
 
@@ -13,6 +14,17 @@ export function getWishById(id: string): Wish | undefined {
 
 export function createWish(input: CreateWishInput): Wish {
   const createdAt = new Date().toISOString();
+
+  // Gather approved-public stars for blue-noise placement.
+  // O(n) per insert — acceptable at current scale (few hundred stars);
+  // would need spatial indexing (e.g. a grid or quadtree) past ~5 000 stars.
+  const existingStars = wishes
+    .filter((w) => w.status === 'approved' && w.visibility === 'public')
+    .map((w) => ({ x: w.x, y: w.y }));
+
+  const { x, y } = findStarPlacement(existingStars);
+  const z = generateStarDepth();
+
   const wish: Wish = {
     id: `wish-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
     text: input.text.trim(),
@@ -22,9 +34,9 @@ export function createWish(input: CreateWishInput): Wish {
     createdAt,
     updatedAt: createdAt,
     reactions: 0,
-    x: Number((Math.random() * 0.9 + 0.07).toFixed(3)),
-    y: Number((Math.random() * 0.9 + 0.04).toFixed(3)),
-    z: 0,
+    x,
+    y,
+    z,
     size: Number((Math.random() * 1.6 + 1.2).toFixed(2)),
     brightness: Number((Math.random() * 0.5 + 0.8).toFixed(2)),
     hue: Math.floor(Math.random() * 80) + 30,
@@ -33,6 +45,7 @@ export function createWish(input: CreateWishInput): Wish {
   wishes = [wish, ...wishes];
   return wish;
 }
+
 
 export function addLight(wishId: string): Wish | undefined {
   const target = wishes.find((wish) => wish.id === wishId);

@@ -283,7 +283,7 @@ function GalaxyView() {
           <div className="landing-glow" aria-hidden="true" />
           <button
             type="button"
-            className="soft-button lang-toggle lang-toggle--landing"
+            className="lang-toggle lang-toggle--landing"
             onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
             aria-label={t('nav.languageLabel')}
           >
@@ -379,7 +379,7 @@ function GalaxyView() {
             </button>
             <button
               type="button"
-              className="sky-control sky-control--wide"
+              className="sky-control"
               onClick={() => {
                 handleCloseWish()
                 galaxyCanvasRef.current?.resetView()
@@ -387,7 +387,7 @@ function GalaxyView() {
               aria-label={t('sky.recenterLabel')}
               title={t('sky.recenterLabel')}
             >
-              {t('sky.recenter')}
+              ⌖
             </button>
           </div>
 
@@ -439,12 +439,12 @@ function GalaxyView() {
                   </span>
                 )}
               </div>
-              <button type="button" className="soft-button" onClick={() => setIsComposerOpen(true)}>
+              <button type="button" className="wish-cta" onClick={() => setIsComposerOpen(true)}>
                 {t('nav.leaveWish')}
               </button>
               <button
                 type="button"
-                className="soft-button lang-toggle"
+                className="lang-toggle"
                 onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
                 aria-label={t('nav.languageLabel')}
               >
@@ -488,19 +488,19 @@ function GalaxyView() {
                 </div>
 
                 <div className="wish-actions">
-                  <button type="button" className="primary" onClick={handleLight}>
+                  <button type="button" className="wish-action wish-action--light" onClick={handleLight}>
                     {t('wish.sendLight')}
                   </button>
                   <button
                     type="button"
-                    className={`secondary ${isSaved ? 'active-save' : ''}`}
+                    className={`wish-action ${isSaved ? 'is-active' : ''}`}
                     onClick={handleToggleSave}
                   >
                     {isSaved ? t('wish.saved') : t('wish.save')}
                   </button>
                   <button
                     type="button"
-                    className={`soft-button mirror-toggle ${showMirror ? 'active' : ''}`}
+                    className={`wish-action ${showMirror ? 'is-active' : ''}`}
                     onClick={() => setShowMirror((prev) => !prev)}
                   >
                     {t('wish.mirror')}

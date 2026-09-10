@@ -1,7 +1,22 @@
+/* One palette and one spacing feel for the whole product. The sky is the
+   subject; every surface around it is ink on deep ground, separated by
+   hairlines rather than boxes, so the chrome recedes instead of competing. */
+:root {
+  --ground: #04070d;
+  --ink: #f4efe7;
+  --ink-2: rgba(244, 239, 231, 0.74);
+  --ink-3: rgba(244, 239, 231, 0.52);
+  --ink-4: rgba(244, 239, 231, 0.34);
+  --hairline: rgba(244, 239, 231, 0.1);
+  --hairline-2: rgba(244, 239, 231, 0.22);
+  --starlight: #e9d3a3;
+  --panel: rgba(7, 11, 18, 0.74);
+}
+
 .app-shell {
   min-height: 100vh;
-  background: #04070d;
-  color: #f4efe7;
+  background: var(--ground);
+  color: var(--ink);
 }
 
 /* Bangla typography.
@@ -22,7 +37,12 @@ html[lang='bn'] .category-pill,
 html[lang='bn'] .sky-control,
 html[lang='bn'] .page-header h1,
 html[lang='bn'] .mirror-badge,
-html[lang='bn'] .tab,
+html[lang='bn'] .tab-btn,
+html[lang='bn'] .chip,
+html[lang='bn'] .wish-action,
+html[lang='bn'] .active-filter-banner,
+html[lang='bn'] .clear-filter-btn,
+html[lang='bn'] .constellation-footer,
 html[lang='bn'] .recovery-modal-title,
 html[lang='bn'] .constellation-count,
 html[lang='bn'] .empty-title,
@@ -85,60 +105,70 @@ button {
 }
 
 .eyebrow {
-  font-size: 0.8rem;
-  letter-spacing: 0.28rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: rgba(230, 223, 212, 0.8);
-  margin-bottom: 1rem;
+  color: var(--ink-4);
+  margin-bottom: 1.5rem;
 }
 
 .landing-copy h1 {
   margin: 0;
-  font-size: clamp(3rem, 7vw, 7rem);
-  letter-spacing: 0.12em;
-  font-weight: 500;
+  font-family: 'Playfair Display', 'Cormorant Garamond', 'Noto Serif Bengali',
+    'Noto Sans Bengali', ui-serif, Georgia, serif;
+  font-size: clamp(2.75rem, 6.5vw, 5.5rem);
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  font-weight: 300;
 }
 
 .tagline {
-  margin-top: 1.25rem;
-  color: rgba(237, 234, 228, 0.72);
-  font-size: clamp(1.05rem, 2vw, 1.5rem);
-  line-height: 1.7;
+  margin-top: 1.75rem;
+  color: var(--ink-3);
+  font-size: clamp(0.98rem, 1.6vw, 1.15rem);
+  line-height: 1.9;
 }
 
 .landing-actions {
   display: flex;
   justify-content: center;
-  gap: 1rem;
-  margin-top: 2.5rem;
+  gap: 0.75rem;
+  margin-top: 3rem;
   flex-wrap: wrap;
 }
 
 .primary,
 .secondary,
 .soft-button {
-  border: 1px solid rgba(233, 222, 196, 0.2);
+  border: 1px solid var(--hairline-2);
   border-radius: 999px;
-  padding: 0.9rem 1.5rem;
-  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+  padding: 0.85rem 1.6rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
 }
 
 .primary {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f7f3ee;
+  background: rgba(244, 239, 231, 0.08);
+  color: var(--ink);
 }
 
 .secondary,
 .soft-button {
   background: transparent;
-  color: rgba(244, 239, 231, 0.8);
+  border-color: transparent;
+  color: var(--ink-3);
 }
 
-.primary:hover,
+.primary:hover {
+  background: rgba(244, 239, 231, 0.14);
+  border-color: rgba(244, 239, 231, 0.4);
+}
+
 .secondary:hover,
 .soft-button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(233, 222, 196, 0.45);
+  color: var(--ink);
+  border-color: var(--hairline-2);
 }
 
 .primary:disabled,
@@ -226,40 +256,50 @@ button {
 .sky-controls {
   position: absolute;
   z-index: 3;
-  left: clamp(1rem, 2vw, 2rem);
-  bottom: 2rem;
+  left: clamp(1.25rem, 3vw, 2.5rem);
+  bottom: clamp(1.25rem, 3vw, 2.5rem);
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 1px;
+  opacity: 0.4;
+  transition: opacity 220ms ease;
 }
 
+.sky-controls:hover,
+.sky-controls:focus-within {
+  opacity: 1;
+}
+
+/* Joined into one column with hairline dividers, so it reads as a single
+   quiet instrument rather than three floating buttons. */
 .sky-control {
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 2rem;
+  height: 2rem;
   display: grid;
   place-items: center;
-  border-radius: 999px;
-  border: 1px solid rgba(233, 222, 196, 0.18);
-  background: rgba(12, 17, 26, 0.7);
-  color: rgba(244, 239, 231, 0.75);
-  font-size: 0.9rem;
+  border: 1px solid var(--hairline);
+  border-bottom-width: 0;
+  background: var(--panel);
+  color: var(--ink-3);
+  font-size: 0.85rem;
   line-height: 1;
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.sky-controls .sky-control:first-child {
+  border-radius: 4px 4px 0 0;
+}
+
+.sky-controls .sky-control:last-child {
+  border-radius: 0 0 4px 4px;
+  border-bottom-width: 1px;
 }
 
 .sky-control:hover {
-  border-color: rgba(233, 222, 196, 0.45);
-  color: #f7f3ee;
-  background: rgba(18, 24, 36, 0.85);
-}
-
-.sky-control--wide {
-  width: auto;
-  padding: 0 0.7rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
+  color: var(--ink);
+  background: rgba(16, 22, 34, 0.9);
 }
 
 .top-bar {
@@ -268,13 +308,20 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.25rem 2rem 0;
+  gap: 1.5rem;
+  padding: 1.5rem clamp(1.25rem, 3vw, 2.5rem) 0;
 }
 
 .brand {
-  letter-spacing: 0.22rem;
-  font-size: 0.8rem;
-  color: rgba(244, 239, 231, 0.7);
+  letter-spacing: 0.2em;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  transition: color 160ms ease;
+}
+
+.brand:hover {
+  color: var(--ink);
 }
 
 .wish-card {
@@ -283,14 +330,21 @@ button {
   right: clamp(1.25rem, 3vw, 3rem);
   top: 50%;
   transform: translateY(-50%);
-  width: min(430px, 80vw);
-  background: rgba(8, 12, 18, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 1.75rem 1.5rem 1.5rem;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  width: min(400px, 82vw);
+  /* Opaque enough that the wish reads as an inscription on a surface: at a
+     lower alpha the starfield showed through the text and the hairlines
+     disappeared, which read as unfinished rather than quiet. */
+  background: linear-gradient(
+    180deg,
+    rgba(6, 10, 17, 0.94) 0%,
+    rgba(5, 8, 14, 0.9) 100%
+  );
+  border: none;
+  border-radius: 4px;
+  padding: 2.5rem 2rem 2rem;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
   transition: opacity 180ms ease, transform 220ms ease, width 220ms ease, padding 220ms ease;
 }
 
@@ -300,13 +354,19 @@ button {
 
 .wish-card--empty {
   top: auto;
-  bottom: 2rem;
+  right: 0;
+  left: 0;
+  bottom: clamp(1.5rem, 4vw, 2.75rem);
   transform: none;
   width: auto;
-  max-width: min(280px, 70vw);
-  padding: 0.7rem 1rem;
-  border-radius: 999px;
-  opacity: 0.82;
+  max-width: none;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  text-align: center;
+  pointer-events: none;
 }
 
 .wish-card--empty .wish-mark {
@@ -316,6 +376,8 @@ button {
 .wish-card--empty .empty-wish {
   margin: 0;
   font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
 }
 
 .wish-close {
@@ -336,49 +398,87 @@ button {
 
 .wish-mark {
   text-align: center;
-  margin-bottom: 0.85rem;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 1.5rem;
+  margin-bottom: 1.25rem;
+  color: var(--ink-4);
+  font-size: 0.85rem;
 }
 
 .wish-card blockquote {
   margin: 0;
   text-align: center;
   font-family: 'Playfair Display', 'Cormorant Garamond', 'Noto Serif Bengali', 'Noto Sans Bengali', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
-  font-size: clamp(1.35rem, 2.6vw, 1.95rem);
-  line-height: 1.45;
+  font-size: clamp(1.45rem, 2.8vw, 2.05rem);
+  line-height: 1.4;
   font-weight: 300;
-  letter-spacing: 0.015em;
-  color: #f7f4ee;
+  letter-spacing: 0.005em;
+  color: var(--ink);
 }
 
 .wish-meta {
   display: flex;
   justify-content: center;
-  gap: 0.7rem;
-  margin-top: 1.4rem;
-  color: rgba(244, 239, 231, 0.6);
-  font-size: 0.72rem;
-  letter-spacing: 0.12rem;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.75rem;
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   font-family: 'Inter', 'Noto Sans Bengali', system-ui, -apple-system, sans-serif;
 }
 
+/* Actions sit on a hairline as quiet text. The previous row of three filled
+   pills read as a social post's like/save/share bar, which is the one thing
+   the product explicitly is not (see "This is not a social network" in the
+   README) — witnessing should feel offered, not tallied. */
 .wish-actions {
   display: flex;
   justify-content: center;
-  gap: 0.85rem;
-  margin-top: 1.4rem;
-  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+  margin-top: 1.75rem;
+  border-top: 1px solid rgba(244, 239, 231, 0.14);
+  border-bottom: 1px solid rgba(244, 239, 231, 0.14);
   font-family: 'Inter', 'Noto Sans Bengali', system-ui, -apple-system, sans-serif;
 }
 
+.wish-action {
+  flex: 1;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 0.9rem 0.5rem;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.wish-action + .wish-action {
+  border-left: 1px solid rgba(244, 239, 231, 0.14);
+}
+
+.wish-action:hover {
+  color: var(--ink);
+  background: rgba(244, 239, 231, 0.04);
+}
+
+.wish-action--light:hover {
+  color: var(--starlight);
+}
+
+.wish-action.is-active {
+  color: var(--starlight);
+}
+
+/* Phrased and styled as a quiet observation rather than a metric. */
 .light-count {
-  margin-top: 0.9rem;
+  margin-top: 1.1rem;
   text-align: center;
-  color: rgba(244, 239, 231, 0.65);
-  font-size: 0.76rem;
-  letter-spacing: 0.04rem;
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
   font-family: 'Inter', 'Noto Sans Bengali', system-ui, -apple-system, sans-serif;
 }
 
@@ -725,42 +825,54 @@ textarea:focus-visible {
   vertical-align: middle;
 }
 
+/* Errors are told, not alarmed about: a quiet line at the bottom of the sky
+   rather than a red block in the top-right, where it used to land on top of
+   the "Leave a wish" button. */
 .error-message {
   position: fixed;
-  top: 20px;
-  right: 20px;
+  left: 50%;
+  bottom: clamp(4.5rem, 9vw, 6rem);
+  transform: translateX(-50%);
   z-index: 26;
-  background: rgba(200, 80, 80, 0.95);
-  color: #f4efe7;
-  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--panel);
+  border: 1px solid rgba(214, 122, 122, 0.35);
   border-radius: 4px;
-  max-width: 400px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-  animation: slideIn 0.3s ease-out;
-  font-size: 0.9rem;
+  color: var(--ink-2);
+  padding: 0.7rem 1rem;
+  max-width: min(440px, 88vw);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: riseInCentered 260ms ease-out;
+  font-size: 0.8rem;
 }
 
 .error-message p {
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 .error-message button {
-  position: absolute;
-  top: 8px;
-  right: 12px;
   background: none;
   border: none;
-  color: #f4efe7;
-  font-size: 1.3rem;
+  color: var(--ink-4);
+  font-size: 1.1rem;
+  line-height: 1;
   padding: 0;
   cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.2s;
+  transition: color 0.2s;
+}
+
+@keyframes riseInCentered {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 
 .error-message button:hover {
-  opacity: 1;
+  color: var(--ink);
 }
 
 @keyframes slideIn {
@@ -780,29 +892,90 @@ textarea:focus-visible {
 }
 
 @media (max-width: 720px) {
+  /* Two rows on narrow screens: identity and the one action on top, then the
+     places to go underneath. Kept on one line each and horizontally
+     scrollable, because on a single row the CTA and language switch were
+     pushed off-screen entirely and the nav labels wrapped mid-phrase. */
   .top-bar {
+    flex-wrap: wrap;
+    row-gap: 0.9rem;
     padding: 1rem 1rem 0;
   }
 
-  .wish-card {
-    position: relative;
-    top: auto;
-    right: auto;
-    transform: none;
-    width: min(90vw, 460px);
-    margin: 5rem auto 1.5rem;
+  .brand-group {
+    order: 1;
   }
 
-  .wish-card--empty {
+  .mini-actions {
+    order: 2;
+    margin-left: auto;
+    gap: 0.85rem;
+  }
+
+  .top-nav {
+    order: 3;
+    flex: 1 0 100%;
+    gap: 1.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 0.15rem;
+  }
+
+  .top-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-link {
+    white-space: nowrap;
+  }
+
+  .sky-search-input,
+  .sky-search-input:focus,
+  .sky-search-input:not(:placeholder-shown) {
+    width: 84px;
+  }
+
+  .wish-card {
     position: absolute;
-    bottom: 1.25rem;
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    transform: none;
     width: auto;
     margin: 0;
+    border-radius: 12px 12px 0 0;
+    padding: 1.75rem 1.25rem 1.5rem;
+    max-height: 72vh;
+    overflow-y: auto;
   }
 
-  .galaxy-screen {
-    padding-bottom: 2rem;
+  .wish-card--selected {
+    animation: sheetUp 280ms ease-out;
   }
+
+  /* Clear of the zoom controls, which share the bottom edge. */
+  .wish-card--empty {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 1.25rem;
+    padding-left: 4rem;
+    width: auto;
+    margin: 0;
+    border-radius: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .error-message {
+    bottom: 8.5rem;
+  }
+}
+
+@keyframes sheetUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ==========================================================================
@@ -817,24 +990,42 @@ textarea:focus-visible {
 
 .brand {
   text-decoration: none;
-  color: #f3efe8;
-  letter-spacing: 0.16em;
-  font-weight: 500;
-  font-size: 0.95rem;
+  font-weight: 400;
 }
 
 .top-nav {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: clamp(1rem, 2.5vw, 2rem);
 }
 
 .nav-link {
-  color: rgba(243, 239, 232, 0.65);
+  position: relative;
+  color: var(--ink-3);
   text-decoration: none;
-  font-size: 0.85rem;
-  letter-spacing: 0.05em;
-  transition: color 0.2s ease, opacity 0.2s ease;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  padding-bottom: 0.2rem;
+  transition: color 180ms ease;
+}
+
+/* A hairline that grows in on hover — quieter than a button, and it keeps the
+   nav from reading as a row of controls. */
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--hairline-2);
+  transform: scaleX(0);
+  transition: transform 220ms ease;
+}
+
+.nav-link:hover::after,
+.nav-link:focus-visible::after {
+  transform: scaleX(1);
 }
 
 .nav-link:hover,
@@ -845,7 +1036,7 @@ textarea:focus-visible {
 .mini-actions {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
 .sky-search {
@@ -854,10 +1045,35 @@ textarea:focus-visible {
   align-items: center;
 }
 
-.lang-toggle {
-  padding: 0.55rem 0.9rem;
-  font-size: 0.78rem;
+.wish-cta {
+  border: 1px solid var(--hairline-2);
+  border-radius: 999px;
+  background: rgba(244, 239, 231, 0.07);
+  color: var(--ink);
+  padding: 0.55rem 1.15rem;
+  font-size: 0.8rem;
   white-space: nowrap;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.wish-cta:hover {
+  background: rgba(244, 239, 231, 0.13);
+  border-color: rgba(244, 239, 231, 0.4);
+}
+
+/* Language is a preference, not an action — plain text, no chrome. */
+.lang-toggle {
+  border: none;
+  background: transparent;
+  color: var(--ink-4);
+  padding: 0.3rem 0;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  transition: color 180ms ease;
+}
+
+.lang-toggle:hover {
+  color: var(--ink-2);
 }
 
 /* The landing screen is the first thing a visitor sees, so the language switch
@@ -870,60 +1086,64 @@ textarea:focus-visible {
 }
 
 .sky-search-input {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(233, 222, 196, 0.18);
-  border-radius: 999px;
-  padding: 0.55rem 2rem 0.55rem 1rem;
-  color: #f4efe7;
-  font-size: 0.82rem;
-  width: 140px;
-  transition: width 200ms ease, border-color 150ms ease, background 150ms ease;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: 0.35rem 1.4rem 0.35rem 0;
+  color: var(--ink);
+  font-size: 0.8rem;
+  width: 108px;
+  transition: width 220ms ease, border-color 180ms ease;
 }
 
 .sky-search-input::placeholder {
-  color: rgba(244, 239, 231, 0.4);
+  color: var(--ink-4);
 }
 
-.sky-search-input:focus {
+.sky-search-input:focus,
+.sky-search-input:not(:placeholder-shown) {
   outline: none;
-  width: 200px;
-  border-color: rgba(233, 222, 196, 0.4);
-  background: rgba(255, 255, 255, 0.07);
+  width: 176px;
+  border-bottom-color: var(--hairline-2);
 }
 
 .sky-search-count {
   position: absolute;
-  right: 0.9rem;
-  font-size: 0.7rem;
-  color: rgba(244, 239, 231, 0.5);
+  right: 0.2rem;
+  font-size: 0.68rem;
+  color: var(--ink-4);
   pointer-events: none;
 }
 
 .active-filter-banner {
   position: absolute;
-  top: 4.5rem;
+  top: 4.75rem;
   left: 50%;
   transform: translateX(-50%);
   z-index: 15;
-  background: rgba(14, 21, 37, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 9999px;
-  padding: 0.4rem 1rem;
-  font-size: 0.82rem;
-  color: rgba(243, 239, 232, 0.85);
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  backdrop-filter: blur(8px);
+  gap: 1rem;
 }
 
 .clear-filter-btn {
   background: transparent;
   border: none;
-  color: rgba(243, 239, 232, 0.6);
+  color: var(--ink-4);
   cursor: pointer;
   padding: 0;
-  font-size: 0.82rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   transition: color 0.15s;
 }
 
@@ -1023,19 +1243,28 @@ textarea:focus-visible {
    Page Layout: PersonalSky, MorningSky, Constellations
    ========================================================================== */
 
+/* Pages sit on the same deep ground as the sky, with a faint glow overhead,
+   so moving between the canvas and a list never feels like leaving the
+   product for an admin screen. */
 .page-container {
   min-height: 100vh;
-  background: #04070d;
-  color: #f3efe8;
-  padding: 2rem 1.5rem 4rem;
-  max-width: 860px;
-  margin: 0 auto;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% -10%, rgba(58, 74, 122, 0.22), transparent 70%),
+    var(--ground);
+  color: var(--ink);
+  padding: clamp(2rem, 6vw, 4rem) clamp(1.25rem, 5vw, 2rem) 6rem;
+}
+
+.page-container > * {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .page-header {
-  margin-bottom: 2rem;
+  margin-bottom: 3rem;
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1.5rem;
@@ -1043,11 +1272,11 @@ textarea:focus-visible {
 
 .back-link {
   display: inline-block;
-  color: rgba(243, 239, 232, 0.6);
+  color: var(--ink-4);
   text-decoration: none;
-  font-size: 0.82rem;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  margin-bottom: 1.5rem;
   transition: color 0.15s ease;
 }
 
@@ -1055,36 +1284,45 @@ textarea:focus-visible {
   color: #f3efe8;
 }
 
+/* Page titles share the wish typeface, which is what ties the lists back to
+   the sky. */
 .page-header h1 {
-  font-size: 2rem;
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  margin: 0 0 0.4rem;
+  font-family: 'Playfair Display', 'Cormorant Garamond', 'Noto Serif Bengali',
+    'Noto Sans Bengali', ui-serif, Georgia, serif;
+  font-size: clamp(2rem, 4.5vw, 2.9rem);
+  font-weight: 300;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  margin: 0 0 0.6rem;
 }
 
 .page-subtitle {
-  color: rgba(243, 239, 232, 0.65);
-  font-size: 0.95rem;
+  color: var(--ink-3);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  max-width: 46ch;
   margin: 0;
 }
 
 .tabs {
   display: flex;
-  gap: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: 2rem;
+  gap: 1.75rem;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 2.5rem;
   overflow-x: auto;
 }
 
 .tab-btn {
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
-  color: rgba(243, 239, 232, 0.55);
-  padding: 0.6rem 1rem;
-  font-size: 0.9rem;
+  border-bottom: 1px solid transparent;
+  color: var(--ink-4);
+  padding: 0 0 0.75rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
   cursor: pointer;
   white-space: nowrap;
+  margin-bottom: -1px;
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 
@@ -1093,68 +1331,98 @@ textarea:focus-visible {
 }
 
 .tab-btn.active {
-  color: #f3efe8;
-  border-color: rgba(255, 255, 255, 0.8);
+  color: var(--ink);
+  border-color: var(--starlight);
 }
 
 .wish-list {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
 }
 
 .personal-wish-card {
-  background: rgba(14, 21, 37, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 1.25rem 1.5rem;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
+  padding: 1.75rem 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1.5rem;
-  backdrop-filter: blur(10px);
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  gap: 2rem;
+  flex-wrap: wrap;
+  transition: none;
 }
 
-.personal-wish-card:hover {
-  border-color: rgba(255, 255, 255, 0.16);
+.wish-list .personal-wish-card:last-child {
+  border-bottom: 1px solid var(--hairline);
 }
 
 .personal-wish-body {
   flex: 1;
 }
 
+/* The wish itself is the only thing set in the display face on these pages,
+   so a list reads as a column of wishes rather than a table of records. */
 .personal-wish-text {
-  font-size: 1.05rem;
+  font-family: 'Playfair Display', 'Cormorant Garamond', 'Noto Serif Bengali',
+    'Noto Sans Bengali', ui-serif, Georgia, serif;
+  font-size: 1.3rem;
+  font-weight: 300;
   line-height: 1.5;
-  color: #f3efe8;
-  margin: 0 0 0.75rem;
+  color: var(--ink);
+  margin: 0 0 0.9rem;
 }
 
 .personal-wish-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
-  font-size: 0.8rem;
-  color: rgba(243, 239, 232, 0.5);
+  font-size: 0.75rem;
+  color: var(--ink-4);
 }
 
+/* Row actions are text, aligned with the wish rather than stacked in a
+   button column on the right. */
 .personal-wish-actions {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 120px;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
 }
 
+.personal-wish-actions button,
+.personal-wish-actions .action-btn {
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  transition: color 160ms ease;
+}
+
+.personal-wish-actions button:hover,
+.personal-wish-actions .action-btn:hover {
+  color: var(--ink);
+  transform: none;
+}
+
+/* Category reads as a label, not a badge — this is a taxonomy, not a tag
+   people collect. */
 .category-pill {
   display: inline-block;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 9999px;
-  padding: 0.15rem 0.55rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   font-size: 0.72rem;
-  text-transform: capitalize;
-  color: rgba(243, 239, 232, 0.75);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
 }
 
 .fulfillment-badge {
@@ -1285,74 +1553,80 @@ textarea:focus-visible {
 
 .constellation-chips {
   display: flex;
-  gap: 0.5rem;
+  gap: 1.5rem;
   flex-wrap: wrap;
-  margin-bottom: 2rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 2.5rem;
 }
 
+/* Filters as text, matching the tab treatment. A row of filled capsules made
+   six categories look like tags to collect; they are just places to look. */
 .chip {
   display: inline-block;
-  padding: 0.4rem 0.85rem;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(243, 239, 232, 0.7);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-4);
   text-decoration: none;
-  font-size: 0.82rem;
-  transition: all 0.15s ease;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  transition: color 0.15s ease;
 }
 
 .chip:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f3efe8;
+  color: var(--ink-2);
 }
 
 .chip.active {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #f3efe8;
+  color: var(--starlight);
 }
 
 .constellations-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
 }
 
+/* A single hairline lattice instead of six floating cards: the categories are
+   one sky divided up, not six separate products. */
 .constellation-card {
-  background: rgba(14, 21, 37, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 1.5rem;
+  background: var(--ground);
+  border: none;
+  border-radius: 0;
+  padding: 1.75rem 1.5rem 1.5rem;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  transition: transform 0.2s ease, border-color 0.2s ease;
-  backdrop-filter: blur(8px);
+  gap: 0.7rem;
+  transition: background 220ms ease;
 }
 
 .constellation-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(244, 239, 231, 0.03);
 }
 
 .constellation-mark {
-  color: rgba(180, 205, 255, 0.7);
-  font-size: 1.1rem;
+  color: var(--ink-4);
+  font-size: 0.8rem;
 }
 
 .constellation-card h2 {
-  font-size: 1.25rem;
-  font-weight: 500;
+  font-family: 'Playfair Display', 'Cormorant Garamond', 'Noto Serif Bengali',
+    'Noto Sans Bengali', ui-serif, Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 300;
   margin: 0;
-  color: #f3efe8;
+  color: var(--ink);
 }
 
 .constellation-desc {
   font-size: 0.85rem;
-  color: rgba(243, 239, 232, 0.6);
-  line-height: 1.4;
+  color: var(--ink-3);
+  line-height: 1.6;
   margin: 0;
   flex: 1;
 }
@@ -1361,17 +1635,18 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 0.75rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 0.78rem;
-  color: rgba(243, 239, 232, 0.45);
+  margin-top: 1rem;
+  padding-top: 0;
+  border-top: none;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-4);
 }
 
 .constellation-arrow {
-  font-size: 1rem;
-  color: rgba(243, 239, 232, 0.6);
-  transition: transform 0.15s ease;
+  font-size: 0.9rem;
+  color: var(--ink-4);
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .constellation-card:hover .constellation-arrow {

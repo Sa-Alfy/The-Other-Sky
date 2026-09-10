@@ -34,7 +34,11 @@ export interface GalaxyCanvasRef {
   recenterOnWish: (wish: Wish, instant?: boolean) => void
   zoomBy: (factor: number) => void
   resetView: () => void
+  /** Briefly flare a star — used when a wish arrives or receives light. */
+  flareWish: (wishId: string) => void
 }
+
+const FLARE_DURATION_MS = 1300
 
 const MIN_ZOOM = 0.5
 const MAX_ZOOM = 4.0
@@ -179,6 +183,8 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
   function GalaxyCanvas({ wishes, selectedWish, onSelectWish, showConstellationLines = false }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const constellationEdgesRef = useRef<[Wish, Wish][]>([])
+    // wishId -> flare start time. Entries are removed once they finish.
+    const flaresRef = useRef<Map<string, number>>(new Map())
 
     useEffect(() => {
       constellationEdgesRef.current = showConstellationLines ? buildConstellationEdges(wishes) : []
@@ -310,11 +316,16 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       cam.targetScale = 1
     }, [])
 
+    const flareWish = useCallback((wishId: string) => {
+      flaresRef.current.set(wishId, performance.now())
+    }, [])
+
     useImperativeHandle(ref, () => ({
       recenterOnWish,
       zoomBy,
       resetView,
-    }), [recenterOnWish, zoomBy, resetView])
+      flareWish,
+    }), [recenterOnWish, zoomBy, resetView, flareWish])
 
     // Main animation & render loop
     useEffect(() => {
@@ -567,7 +578,36 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
             ctx.fill()
           }
 
-          // 4. Selection ring outline (thin, low-opacity, pulsing slowly per 7.1)
+          // 4. Arrival / light flare — an expanding ring plus a brightness
+          // lift, so a wish landing in the sky or receiving light is visible
+          // on the canvas itself rather than only in the UI around it.
+          const flareStart = flaresRef.current.get(wish.id)
+          if (flareStart !== undefined) {
+            const flareT = (time - flareStart) / FLARE_DURATION_MS
+            if (flareT >= 1) {
+              flaresRef.current.delete(wish.id)
+            } else if (!reducedMotion) {
+              const ease = 1 - Math.pow(1 - flareT, 3)
+              const ringRadius = coreRadius + ease * 34
+              const fade = 1 - flareT
+
+              ctx.strokeStyle = `hsla(${color.h}, ${color.s}%, 96%, ${fade * 0.55})`
+              ctx.lineWidth = 1.5
+              ctx.beginPath()
+              ctx.arc(wx, wy, ringRadius, 0, Math.PI * 2)
+              ctx.stroke()
+
+              const burst = ctx.createRadialGradient(wx, wy, 0, wx, wy, coreRadius * 6)
+              burst.addColorStop(0, `hsla(${color.h}, ${color.s}%, 97%, ${fade * 0.5})`)
+              burst.addColorStop(1, `hsla(${color.h}, ${color.s}%, 97%, 0)`)
+              ctx.fillStyle = burst
+              ctx.beginPath()
+              ctx.arc(wx, wy, coreRadius * 6, 0, Math.PI * 2)
+              ctx.fill()
+            }
+          }
+
+          // 5. Selection ring outline (thin, low-opacity, pulsing slowly per 7.1)
           const isSelected = selWish?.id === wish.id
           const isHovered = hovWishId === wish.id
 

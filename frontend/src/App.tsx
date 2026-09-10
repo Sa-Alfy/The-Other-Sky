@@ -1,4 +1,11 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Link, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import './App.css'
 import { GalaxyCanvas, type GalaxyCanvasRef, type Wish } from './components/GalaxyCanvas'
@@ -9,6 +16,10 @@ import { PersonalSky } from './pages/PersonalSky'
 import { formatRelativeTime } from './utils/formatRelativeTime'
 
 const apiBase = import.meta.env.VITE_API_URL || ''
+
+// Duration of the wish-becomes-a-star flight, kept in sync with the
+// wishFlight/wishCollapse keyframes in App.css.
+const RELEASE_FLIGHT_MS = 1700
 
 function GalaxyView() {
   const [wishes, setWishes] = useState<Wish[]>([])
@@ -24,6 +35,8 @@ function GalaxyView() {
   const [showMirror, setShowMirror] = useState(false)
   const [releaseLink, setReleaseLink] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
+  const [releaseText, setReleaseText] = useState('')
+  const [releasePhase, setReleasePhase] = useState<'flying' | 'landed' | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const galaxyCanvasRef = useRef<GalaxyCanvasRef>(null)
 
@@ -157,6 +170,7 @@ function GalaxyView() {
       )
       setSelectedWish(updatedWish)
       setLightPulse((value) => value + 1)
+      galaxyCanvasRef.current?.flareWish(updatedWish.id)
     } else {
       setError(result.error || 'Failed to send light')
     }
@@ -200,11 +214,26 @@ function GalaxyView() {
     if (result.ok && result.data) {
       const createdWish = result.data as Wish
       setWishes((current) => [createdWish, ...current])
-      handleSelectWish(createdWish)
       setDraft('')
       setIsComposerOpen(false)
-      setReleaseLink(`${window.location.origin}/sky?wishId=${createdWish.id}`)
       setLinkCopied(false)
+
+      // Show the wish itself collapsing into a star and travelling to the
+      // point in the sky where its star actually lands.
+      setReleaseText(trimmed)
+      setReleasePhase('flying')
+      setReleaseLink(null)
+
+      // The camera glides to the new star while the light rises, so the sky is
+      // already settled on it by the time the flare lands.
+      galaxyCanvasRef.current?.recenterOnWish(createdWish)
+
+      window.setTimeout(() => {
+        galaxyCanvasRef.current?.flareWish(createdWish.id)
+        handleSelectWish(createdWish)
+        setReleasePhase('landed')
+        setReleaseLink(`${window.location.origin}/sky?wishId=${createdWish.id}`)
+      }, RELEASE_FLIGHT_MS)
     } else {
       setError(result.error || 'Failed to create wish')
       setIsReleasing(false)
@@ -215,6 +244,8 @@ function GalaxyView() {
     setIsReleasing(false)
     setReleaseLink(null)
     setLinkCopied(false)
+    setReleasePhase(null)
+    setReleaseText('')
   }, [])
 
   const handleCopyReleaseLink = async () => {
@@ -469,8 +500,16 @@ function GalaxyView() {
 
           {isReleasing && (
             <div className="release-overlay" aria-live="polite">
-              <div className="particle" aria-hidden="true" />
-              <div className="release-message">
+              {releasePhase === 'flying' && (
+                <>
+                  <p className="release-wish-text" aria-hidden="true">
+                    “{releaseText}”
+                  </p>
+                  <div className="release-star" aria-hidden="true" />
+                </>
+              )}
+
+              <div className={`release-message ${releasePhase === 'landed' ? 'is-visible' : ''}`}>
                 <p>Your wish is somewhere in this sky now.</p>
                 {releaseLink && (
                   <div className="release-link-box">

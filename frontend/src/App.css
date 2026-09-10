@@ -181,6 +181,7 @@ button {
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  animation: fadeIn 140ms ease-out;
 }
 
 /* Zoom / recenter controls — pan and zoom were previously discoverable only by
@@ -254,6 +255,10 @@ button {
   -webkit-backdrop-filter: blur(4px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   transition: opacity 180ms ease, transform 220ms ease, width 220ms ease, padding 220ms ease;
+}
+
+.wish-card--selected {
+  animation: cardIn 320ms ease-out;
 }
 
 .wish-card--empty {
@@ -375,6 +380,7 @@ button {
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 26px;
   padding: 2rem 1.5rem 1.25rem;
+  animation: panelIn 260ms ease-out;
 }
 
 .close-button {
@@ -469,16 +475,32 @@ button {
   background: radial-gradient(circle, transparent 0%, rgba(8, 10, 18, 0.2) 52%, rgba(8, 10, 18, 0.7) 100%);
 }
 
-.particle {
+/* Release sequence: the wish text condenses, then a point of light carries it
+   to the exact spot where its star lands in the sky. */
+.release-wish-text {
   position: absolute;
   left: 50%;
-  top: 60%;
-  width: 12px;
-  height: 12px;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 80vw);
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #f5efe7;
+  animation: wishCollapse 0.85s ease-in forwards;
+}
+
+.release-star {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.8);
-  box-shadow: 0 0 22px rgba(255,255,255,0.9);
-  animation: particleFlight 1.4s ease-in forwards;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 22px rgba(255, 236, 194, 0.9);
+  animation: wishFlight 1.7s cubic-bezier(0.35, 0, 0.2, 1) forwards;
 }
 
 .release-message {
@@ -492,6 +514,15 @@ button {
   letter-spacing: 0.06rem;
   text-transform: uppercase;
   pointer-events: auto;
+  opacity: 0;
+  transition: opacity 500ms ease;
+}
+
+/* Held back until the star has actually arrived, so the copy confirms
+   something the user just watched happen. */
+.release-message.is-visible {
+  opacity: 1;
+  animation: riseIn 600ms ease-out;
 }
 
 .release-message .secondary {
@@ -589,19 +620,42 @@ textarea:focus-visible {
   100% { transform: translate3d(1%, -1.5%, 0) scale(1.03); }
 }
 
-@keyframes particleFlight {
-  0% {
-    opacity: 0.95;
-    transform: translate(-50%, 0) scale(1);
-  }
-  45% {
-    opacity: 1;
-    transform: translate(-30%, -140px) scale(1.3);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(80px, -260px) scale(0.6);
-  }
+/* The words shrink toward a single point of light. */
+@keyframes wishCollapse {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.02); filter: blur(0); }
+  25% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.35); filter: blur(2px); }
+}
+
+/* ...which then rises into the sky, drifting slightly as it goes, and fades as
+   the camera arrives on the new star and that star flares on the canvas. */
+@keyframes wishFlight {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.2); }
+  20% { opacity: 1; transform: translate(0, -4vh) scale(1.6); }
+  60% { opacity: 1; transform: translate(2vw, -24vh) scale(1); }
+  100% { opacity: 0; transform: translate(3vw, -40vh) scale(0.45); }
+}
+
+@keyframes riseIn {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% + 14px)); }
+  100% { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+/* Wish card arriving when a star is selected. */
+@keyframes cardIn {
+  0% { opacity: 0; transform: translateY(calc(-50% + 10px)) scale(0.985); }
+  100% { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+
+/* Composer opening. */
+@keyframes panelIn {
+  0% { opacity: 0; transform: translateY(12px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes lightBurst {

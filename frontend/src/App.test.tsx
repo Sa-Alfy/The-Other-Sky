@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { LanguageProvider } from './LanguageProvider'
 import { beforeEach, expect, test } from 'vitest'
 import App from './App'
 import { Constellations } from './pages/Constellations'
@@ -54,7 +55,9 @@ beforeEach(() => {
 test('landing screen invites the user to enter the sky', () => {
   render(
     <MemoryRouter initialEntries={['/']}>
+      <LanguageProvider>
       <App />
+    </LanguageProvider>
     </MemoryRouter>
   )
   expect(screen.getByRole('button', { name: 'Enter the Sky' })).toBeInTheDocument()
@@ -63,7 +66,9 @@ test('landing screen invites the user to enter the sky', () => {
 test('galaxy view shows navigation bar with new Milestone 5 links', async () => {
   render(
     <MemoryRouter initialEntries={['/sky']}>
+      <LanguageProvider>
       <App />
+    </LanguageProvider>
     </MemoryRouter>
   )
   expect(screen.getByRole('link', { name: 'Constellations' })).toBeInTheDocument()
@@ -74,7 +79,9 @@ test('galaxy view shows navigation bar with new Milestone 5 links', async () => 
 test('personal sky renders tabs for own, saved, and lighted wishes', async () => {
   render(
     <MemoryRouter>
+      <LanguageProvider>
       <PersonalSky />
+    </LanguageProvider>
     </MemoryRouter>
   )
   expect(await screen.findByRole('heading', { name: 'Personal Sky' })).toBeInTheDocument()
@@ -86,7 +93,9 @@ test('personal sky renders tabs for own, saved, and lighted wishes', async () =>
 test('morning sky renders poetic heading and empty state', async () => {
   render(
     <MemoryRouter>
+      <LanguageProvider>
       <MorningSky />
+    </LanguageProvider>
     </MemoryRouter>
   )
   expect(await screen.findByRole('heading', { name: 'It happened.' })).toBeInTheDocument()
@@ -96,7 +105,9 @@ test('morning sky renders poetic heading and empty state', async () => {
 test('constellations page renders constellations grid and chips', async () => {
   render(
     <MemoryRouter>
+      <LanguageProvider>
       <Constellations />
+    </LanguageProvider>
     </MemoryRouter>
   )
   expect(await screen.findByRole('heading', { name: 'Constellations' })).toBeInTheDocument()
@@ -129,7 +140,9 @@ test('closing a deep-linked wish card closes the card without re-opening', async
 
   render(
     <MemoryRouter initialEntries={['/sky?wishId=test-wish-1']}>
+      <LanguageProvider>
       <App />
+    </LanguageProvider>
     </MemoryRouter>
   )
 

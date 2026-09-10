@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Wish } from './GalaxyCanvas'
+import { useCategoryLabel, useLanguage } from '../i18n'
 
 interface MirrorPanelProps {
   wish: Wish
@@ -13,9 +14,10 @@ interface MirrorResponse {
 }
 
 export function MirrorPanel({ wish, onSelectWish, onClose }: MirrorPanelProps) {
+  const { t } = useLanguage()
+  const categoryLabel = useCategoryLabel()
   const [related, setRelated] = useState<Wish[]>([])
   const [loading, setLoading] = useState(true)
-  const [message, setMessage] = useState("You're not the only one.")
 
   useEffect(() => {
     let active = true
@@ -27,7 +29,6 @@ export function MirrorPanel({ wish, onSelectWish, onClose }: MirrorPanelProps) {
         if (active && json.success && json.data) {
           const data = json.data as MirrorResponse
           setRelated(data.relatedWishes ?? [])
-          if (data.message) setMessage(data.message)
         }
       } catch (err) {
         console.error('Failed to load mirror wishes', err)
@@ -43,20 +44,20 @@ export function MirrorPanel({ wish, onSelectWish, onClose }: MirrorPanelProps) {
   }, [wish.id])
 
   return (
-    <div className="mirror-panel" role="region" aria-label="Mirror — related wishes">
+    <div className="mirror-panel" role="region" aria-label={t('mirror.regionLabel')}>
       <div className="mirror-header">
-        <span className="mirror-badge">✦ The Mirror</span>
-        <button type="button" className="wish-close" onClick={onClose} aria-label="Close mirror">
+        <span className="mirror-badge">{t('mirror.badge')}</span>
+        <button type="button" className="wish-close" onClick={onClose} aria-label={t('mirror.close')}>
           ×
         </button>
       </div>
 
-      <p className="mirror-message">“{message}”</p>
+      <p className="mirror-message">“{t('mirror.message')}”</p>
 
       {loading ? (
-        <p className="mirror-loading">Listening for echoes in the sky...</p>
+        <p className="mirror-loading">{t('mirror.loading')}</p>
       ) : related.length === 0 ? (
-        <p className="mirror-empty">No similar wishes found yet in this part of the sky.</p>
+        <p className="mirror-empty">{t('mirror.empty')}</p>
       ) : (
         <ul className="mirror-list">
           {related.map((item) => (
@@ -68,8 +69,8 @@ export function MirrorPanel({ wish, onSelectWish, onClose }: MirrorPanelProps) {
               >
                 <span className="mirror-text">“{item.text}”</span>
                 <span className="mirror-meta">
-                  <span className="category-pill">{item.category}</span>
-                  <span>{item.reactions} light</span>
+                  <span className="category-pill">{categoryLabel(item.category)}</span>
+                  <span>{t('mirror.light', { n: item.reactions })}</span>
                 </span>
               </button>
             </li>

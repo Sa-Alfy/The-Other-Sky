@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { Wish } from '../components/GalaxyCanvas'
+import { localizeDigits, useCategoryLabel, useLanguage } from '../i18n'
 
 interface Constellation {
   id: string
@@ -11,6 +12,12 @@ interface Constellation {
 }
 
 export function Constellations() {
+  const { t, language } = useLanguage()
+  const tRef = useRef(t)
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
+  const categoryLabel = useCategoryLabel()
   const { slug } = useParams<{ slug?: string }>()
   const [constellations, setConstellations] = useState<Constellation[]>([])
   const [rawCategoryWishes, setRawCategoryWishes] = useState<Wish[]>([])
@@ -30,7 +37,7 @@ export function Constellations() {
           setConstellations(json.data as Constellation[])
         }
       } catch {
-        if (active) setError('Failed to load constellations')
+        if (active) setError(tRef.current('constellations.loadFailed'))
       } finally {
         if (active) setLoading(false)
       }
@@ -55,7 +62,7 @@ export function Constellations() {
           setRawCategoryWishes(json.data as Wish[])
         }
       } catch {
-        if (active) setError('Failed to load constellation wishes')
+        if (active) setError(tRef.current('constellations.wishesFailed'))
       } finally {
         if (active) setLoading(false)
       }
@@ -75,13 +82,16 @@ export function Constellations() {
       <header className="page-header">
         <div className="page-header-left">
           <Link to="/sky" className="back-link">
-            ← Return to Sky
+            {t('morning.back')}
           </Link>
-          <p className="eyebrow">Shared Patterns</p>
-          <h1>{selectedConstellation ? selectedConstellation.name : 'Constellations'}</h1>
+          <p className="eyebrow">{t('constellations.eyebrow')}</p>
+          <h1>
+            {selectedConstellation
+              ? categoryLabel(selectedConstellation.slug)
+              : t('constellations.title')}
+          </h1>
           <p className="page-subtitle">
-            {selectedConstellation?.description ??
-              'Strangers connected across the universe by common human threads.'}
+            {selectedConstellation?.description ?? t('constellations.subtitle')}
           </p>
         </div>
         {selectedConstellation && (
@@ -91,7 +101,7 @@ export function Constellations() {
               className="primary"
               onClick={() => navigate(`/sky?category=${selectedConstellation.slug}`)}
             >
-              Explore this Sky Region
+              {t('constellations.explore')}
             </button>
           </div>
         )}
@@ -100,12 +110,12 @@ export function Constellations() {
       {error && <div className="error-message"><p>{error}</p></div>}
 
       {/* Constellation category selector chips */}
-      <div className="constellation-chips" role="navigation" aria-label="Constellation selection">
+      <div className="constellation-chips" role="navigation" aria-label={t('constellations.navLabel')}>
         <Link
           to="/constellations"
           className={`chip ${!slug ? 'active' : ''}`}
         >
-          All Constellations
+          {t('constellations.all')}
         </Link>
         {constellations.map((c) => (
           <Link
@@ -113,13 +123,13 @@ export function Constellations() {
             to={`/constellations/${c.slug}`}
             className={`chip ${slug === c.slug ? 'active' : ''}`}
           >
-            {c.name} ({c.wishCount})
+            {categoryLabel(c.slug)} ({localizeDigits(c.wishCount, language)})
           </Link>
         ))}
       </div>
 
       {loading ? (
-        <p className="page-loading">Tracing the stars...</p>
+        <p className="page-loading">{t('constellations.loading')}</p>
       ) : !slug ? (
         /* Constellation Overview Grid */
         <div className="constellations-grid">
@@ -130,10 +140,12 @@ export function Constellations() {
               onClick={() => navigate(`/constellations/${c.slug}`)}
             >
               <span className="constellation-mark">✦</span>
-              <h2>{c.name}</h2>
+              <h2>{categoryLabel(c.slug)}</h2>
               <p className="constellation-desc">{c.description}</p>
               <div className="constellation-footer">
-                <span className="constellation-count">{c.wishCount} stars connected</span>
+                <span className="constellation-count">
+                  {t('constellations.starsConnected', { n: c.wishCount })}
+                </span>
                 <span className="constellation-arrow">→</span>
               </div>
             </article>
@@ -144,8 +156,12 @@ export function Constellations() {
         <div className="wish-list">
           {categoryWishes.length === 0 ? (
             <div className="empty-state">
-              <p className="empty-title">No stars in this constellation yet.</p>
-              <p className="empty-desc">Leave a wish under {selectedConstellation?.name} to be its first star.</p>
+              <p className="empty-title">{t('constellations.emptyTitle')}</p>
+              <p className="empty-desc">
+                {t('constellations.emptyDesc', {
+                  name: selectedConstellation ? categoryLabel(selectedConstellation.slug) : '',
+                })}
+              </p>
             </div>
           ) : (
             categoryWishes.map((wish) => (
@@ -153,8 +169,8 @@ export function Constellations() {
                 <div className="personal-wish-body">
                   <blockquote className="personal-wish-text">“{wish.text}”</blockquote>
                   <div className="personal-wish-meta">
-                    <span className="category-pill">{wish.category}</span>
-                    <span>{wish.reactions} people sent light</span>
+                    <span className="category-pill">{categoryLabel(wish.category)}</span>
+                    <span>{t('constellations.sentLight', { n: wish.reactions })}</span>
                   </div>
                 </div>
                 <div className="personal-wish-actions">
@@ -163,7 +179,7 @@ export function Constellations() {
                     className="soft-button"
                     onClick={() => navigate(`/sky?wishId=${wish.id}`)}
                   >
-                    Locate Star
+                    {t('constellations.locateStar')}
                   </button>
                 </div>
               </article>

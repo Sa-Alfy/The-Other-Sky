@@ -1,8 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Wish } from '../components/GalaxyCanvas'
+import { useCategoryLabel, useLanguage } from '../i18n'
 
 export function MorningSky() {
+  const { t, language } = useLanguage()
+  const tRef = useRef(t)
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
+  const categoryLabel = useCategoryLabel()
   const [fulfilledWishes, setFulfilledWishes] = useState<Wish[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -17,10 +24,10 @@ export function MorningSky() {
         if (json.success && Array.isArray(json.data)) {
           setFulfilledWishes(json.data as Wish[])
         } else {
-          setError(json.error?.message || 'Failed to load Morning Sky')
+          setError(json.error?.message || tRef.current('morning.loadFailed'))
         }
       } catch {
-        setError('Network error loading Morning Sky')
+        setError(tRef.current('morning.networkError'))
       } finally {
         setLoading(false)
       }
@@ -34,13 +41,13 @@ export function MorningSky() {
       <header className="page-header morning-header">
         <div className="page-header-left">
           <Link to="/sky" className="back-link">
-            ← Return to Sky
+            {t('morning.back')}
           </Link>
           <div className="morning-glow" aria-hidden="true" />
-          <p className="eyebrow golden">The Morning Sky</p>
-          <h1>It happened.</h1>
+          <p className="eyebrow golden">{t('morning.eyebrow')}</p>
+          <h1>{t('morning.title')}</h1>
           <p className="page-subtitle">
-            Wishes that found their answer in the waking world.
+            {t('morning.subtitle')}
           </p>
         </div>
       </header>
@@ -48,15 +55,15 @@ export function MorningSky() {
       {error && <div className="error-message"><p>{error}</p></div>}
 
       {loading ? (
-        <p className="page-loading">Waiting for dawn...</p>
+        <p className="page-loading">{t('morning.loading')}</p>
       ) : fulfilledWishes.length === 0 ? (
         <div className="empty-state">
-          <p className="empty-title">The morning sky is still quiet.</p>
+          <p className="empty-title">{t('morning.emptyTitle')}</p>
           <p className="empty-desc">
-            When a wish you made comes true, you can mark it as fulfilled in your Personal Sky.
+            {t('morning.emptyDesc')}
           </p>
           <Link to="/sky" className="primary action-btn">
-            Look at the Night Sky
+            {t('morning.lookAtNight')}
           </Link>
         </div>
       ) : (
@@ -68,15 +75,21 @@ export function MorningSky() {
                 <blockquote className="personal-wish-text">“{wish.text}”</blockquote>
                 {wish.fulfillmentNote && (
                   <div className="morning-note-box">
-                    <span className="morning-note-label">The fulfillment:</span>
+                    <span className="morning-note-label">{t('morning.noteLabel')}</span>
                     <p className="morning-note-text">“{wish.fulfillmentNote}”</p>
                   </div>
                 )}
                 <div className="personal-wish-meta">
-                  <span className="category-pill golden-pill">{wish.category}</span>
-                  <span>{wish.reactions} people witnessed this</span>
+                  <span className="category-pill golden-pill">{categoryLabel(wish.category)}</span>
+                  <span>{t('morning.witnessed', { n: wish.reactions })}</span>
                   {wish.fulfilledAt && (
-                    <span>• Fulfilled {new Date(wish.fulfilledAt).toLocaleDateString()}</span>
+                    <span>
+                      {t('morning.fulfilledOn', {
+                        date: new Date(wish.fulfilledAt).toLocaleDateString(
+                          language === 'bn' ? 'bn-BD' : 'en-US'
+                        ),
+                      })}
+                    </span>
                   )}
                 </div>
               </div>
@@ -87,7 +100,7 @@ export function MorningSky() {
                   className="soft-button"
                   onClick={() => navigate(`/sky?wishId=${wish.id}`)}
                 >
-                  Locate Star
+                  {t('constellations.locateStar')}
                 </button>
               </div>
             </article>

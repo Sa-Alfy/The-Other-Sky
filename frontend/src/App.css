@@ -4,6 +4,43 @@
   color: #f4efe7;
 }
 
+/* Bangla typography.
+   The English design leans on wide letter-spacing and uppercase for its
+   spare, airy feel. Neither translates: Bangla is a connected script, so
+   letter-spacing pulls conjuncts apart and makes words hard to read, and the
+   script has no letter case for uppercase to act on. `lang` is set on <html>
+   by the language provider, so this rewrites those two properties only. */
+html[lang='bn'] body,
+html[lang='bn'] .eyebrow,
+html[lang='bn'] .brand,
+html[lang='bn'] .nav-link,
+html[lang='bn'] .landing-copy h1,
+html[lang='bn'] .release-message,
+html[lang='bn'] .wish-meta,
+html[lang='bn'] .light-count,
+html[lang='bn'] .category-pill,
+html[lang='bn'] .sky-control,
+html[lang='bn'] .page-header h1,
+html[lang='bn'] .mirror-badge,
+html[lang='bn'] .tab,
+html[lang='bn'] .recovery-modal-title,
+html[lang='bn'] .constellation-count,
+html[lang='bn'] .empty-title,
+html[lang='bn'] .form-label {
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* Bangla glyphs carry more vertical detail than Latin, so they need a little
+   more room to breathe at the same font size. */
+html[lang='bn'] .tagline,
+html[lang='bn'] .page-subtitle,
+html[lang='bn'] .wish-card blockquote,
+html[lang='bn'] .personal-wish-text,
+html[lang='bn'] .mirror-message {
+  line-height: 1.75;
+}
+
 button,
 textarea,
 select {
@@ -307,7 +344,7 @@ button {
 .wish-card blockquote {
   margin: 0;
   text-align: center;
-  font-family: 'Playfair Display', 'Cormorant Garamond', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  font-family: 'Playfair Display', 'Cormorant Garamond', 'Noto Serif Bengali', 'Noto Sans Bengali', ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
   font-size: clamp(1.35rem, 2.6vw, 1.95rem);
   line-height: 1.45;
   font-weight: 300;
@@ -324,7 +361,7 @@ button {
   font-size: 0.72rem;
   letter-spacing: 0.12rem;
   text-transform: uppercase;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', 'Noto Sans Bengali', system-ui, -apple-system, sans-serif;
 }
 
 .wish-actions {
@@ -333,7 +370,7 @@ button {
   gap: 0.85rem;
   margin-top: 1.4rem;
   flex-wrap: wrap;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', 'Noto Sans Bengali', system-ui, -apple-system, sans-serif;
 }
 
 .light-count {
@@ -342,14 +379,14 @@ button {
   color: rgba(244, 239, 231, 0.65);
   font-size: 0.76rem;
   letter-spacing: 0.04rem;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', 'Noto Sans Bengali', system-ui, -apple-system, sans-serif;
 }
 
 .empty-wish {
   text-align: center;
   color: rgba(244, 239, 231, 0.65);
   margin-top: 0.8rem;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', 'Noto Sans Bengali', system-ui, -apple-system, sans-serif;
   font-size: 0.92rem;
 }
 
@@ -815,6 +852,21 @@ textarea:focus-visible {
   position: relative;
   display: flex;
   align-items: center;
+}
+
+.lang-toggle {
+  padding: 0.55rem 0.9rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+/* The landing screen is the first thing a visitor sees, so the language switch
+   has to be reachable before they enter the sky. */
+.lang-toggle--landing {
+  position: absolute;
+  z-index: 2;
+  top: 1.5rem;
+  right: clamp(1rem, 3vw, 2.5rem);
 }
 
 .sky-search-input {

@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
+import { LanguageProvider } from '../LanguageProvider'
 import { PersonalSky } from './PersonalSky'
 
 // Minimal sky data for tests
@@ -20,7 +21,9 @@ const makeSkyData = (override: Partial<{
 function renderPage() {
   return render(
     <MemoryRouter>
+      <LanguageProvider>
       <PersonalSky />
+    </LanguageProvider>
     </MemoryRouter>
   )
 }

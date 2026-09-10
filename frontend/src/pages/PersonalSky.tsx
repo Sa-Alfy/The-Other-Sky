@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { Wish } from '../components/GalaxyCanvas'
+import { localizeDigits, useCategoryLabel, useLanguage } from '../i18n'
 
 interface PersonalSkyData {
   ownWishes: Wish[]
@@ -18,6 +19,7 @@ interface PhraseModalProps {
 }
 
 function PhraseModal({ phrase, onDone }: PhraseModalProps) {
+  const { t } = useLanguage()
   const [copied, setCopied] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
 
@@ -34,26 +36,25 @@ function PhraseModal({ phrase, onDone }: PhraseModalProps) {
   return (
     <div className="recovery-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="phrase-modal-title">
       <div className="recovery-modal">
-        <h2 id="phrase-modal-title" className="recovery-modal-title">Your Recovery Phrase</h2>
+        <h2 id="phrase-modal-title" className="recovery-modal-title">{t('recovery.phraseTitle')}</h2>
         <p className="recovery-modal-subtitle">
-          Use this phrase to reclaim your Personal Sky from any device.
+          {t('recovery.phraseSubtitle')}
         </p>
 
         <div className="recovery-phrase-box">
-          <p className="recovery-phrase-text" aria-label="Recovery phrase">{phrase}</p>
+          <p className="recovery-phrase-text" aria-label={t('recovery.phraseLabel')}>{phrase}</p>
           <button
             type="button"
             className={`copy-btn${copied ? ' copied' : ''}`}
             onClick={handleCopy}
-            aria-label="Copy recovery phrase to clipboard"
+            aria-label={t('recovery.copyLabel')}
           >
-            {copied ? 'Copied ✓' : 'Copy'}
+            {copied ? t('release.copied') : t('release.copy')}
           </button>
         </div>
 
         <div className="recovery-warning-box" role="alert">
-          <strong>This is the only time you'll see this.</strong> Write it down or save it somewhere
-          safe — if you lose it, there is no way to recover your sky. We cannot show it to you again.
+          <strong>{t('recovery.warningStrong')}</strong> {t('recovery.warningRest')}
         </div>
 
         <label className="recovery-confirm-row">
@@ -88,6 +89,7 @@ interface RecoverModalProps {
 }
 
 function RecoverModal({ onClose }: RecoverModalProps) {
+  const { t } = useLanguage()
   const [phrase, setPhrase] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -112,10 +114,10 @@ function RecoverModal({ onClose }: RecoverModalProps) {
       if (json.success) {
         window.location.reload()
       } else {
-        setError(json.error?.message ?? 'Invalid recovery phrase.')
+        setError(json.error?.message ?? t('recovery.invalid'))
       }
     } catch {
-      setError('Network error. Please try again.')
+      setError(t('error.retry'))
     } finally {
       setIsLoading(false)
     }
@@ -124,14 +126,14 @@ function RecoverModal({ onClose }: RecoverModalProps) {
   return (
     <div className="recovery-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="recover-modal-title">
       <div className="recovery-modal">
-        <h2 id="recover-modal-title" className="recovery-modal-title">Recover Your Sky</h2>
+        <h2 id="recover-modal-title" className="recovery-modal-title">{t('recovery.recoverTitle')}</h2>
         <p className="recovery-modal-subtitle">
-          Enter the 4-word phrase you saved when you protected this sky.
+          {t('recovery.recoverSubtitle')}
         </p>
 
         <form className="recover-sky-form" onSubmit={handleRecover}>
           <label className="sr-only" htmlFor="recovery-phrase-input">
-            Recovery phrase
+            {t('recovery.phraseLabel')}
           </label>
           <input
             id="recovery-phrase-input"
@@ -167,7 +169,7 @@ function RecoverModal({ onClose }: RecoverModalProps) {
               className="primary"
               disabled={isLoading || phrase.trim().length === 0}
             >
-              {isLoading ? 'Recovering…' : 'Recover Sky'}
+              {isLoading ? t('recovery.recovering') : t('recovery.recoverButton')}
             </button>
           </div>
         </form>
@@ -180,6 +182,12 @@ function RecoverModal({ onClose }: RecoverModalProps) {
 // Main PersonalSky page
 // ──────────────────────────────────────────
 export function PersonalSky() {
+  const { t, language } = useLanguage()
+  const tRef = useRef(t)
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
+  const categoryLabel = useCategoryLabel()
   const [activeTab, setActiveTab] = useState<'own' | 'saved' | 'lighted'>('own')
   const [skyData, setSkyData] = useState<PersonalSkyData>({
     ownWishes: [],
@@ -209,10 +217,10 @@ export function PersonalSky() {
         if (active && json.success && json.data) {
           setSkyData(json.data as PersonalSkyData)
         } else if (active) {
-          setError(json.error?.message || 'Failed to load personal sky')
+          setError(json.error?.message || tRef.current('error.loadPersonal'))
         }
       } catch {
-        if (active) setError('Network error loading personal sky')
+        if (active) setError(tRef.current('error.networkPersonal'))
       } finally {
         if (active) setLoading(false)
       }
@@ -260,10 +268,10 @@ export function PersonalSky() {
         setFulfillingWishId(null)
         setFulfillNote('')
       } else {
-        setError(json.error?.message || 'Could not mark wish as fulfilled')
+        setError(json.error?.message || t('error.fulfill'))
       }
     } catch {
-      setError('Failed to fulfill wish')
+      setError(t('error.fulfillFailed'))
     }
   }
 
@@ -282,10 +290,10 @@ export function PersonalSky() {
         setError('A recovery phrase is already set for this sky.')
         setSkyData((prev) => ({ ...prev, hasRecoveryPhrase: true }))
       } else {
-        setError(json.error?.message || 'Could not generate recovery phrase.')
+        setError(json.error?.message || t('recovery.generateFailed'))
       }
     } catch {
-      setError('Network error. Please try again.')
+      setError(t('error.retry'))
     } finally {
       setIsGenerating(false)
     }
@@ -318,14 +326,14 @@ export function PersonalSky() {
       <header className="page-header">
         <div className="page-header-left">
           <Link to="/sky" className="back-link">
-            ← Return to Sky
+            {t('morning.back')}
           </Link>
-          <h1>Personal Sky</h1>
-          <p className="page-subtitle">Your private sanctuary among the stars.</p>
+          <h1>{t('personal.title')}</h1>
+          <p className="page-subtitle">{t('personal.subtitle')}</p>
 
           <div className="page-header-actions">
             {skyData.hasRecoveryPhrase ? (
-              <span className="sky-protected-badge">✦ Sky Protected</span>
+              <span className="sky-protected-badge">{t('personal.protected')}</span>
             ) : (
               <button
                 type="button"
@@ -333,7 +341,7 @@ export function PersonalSky() {
                 onClick={handleProtect}
                 disabled={isGenerating || loading}
               >
-                {isGenerating ? 'Generating…' : 'Protect this sky'}
+                {isGenerating ? t('personal.generating') : t('personal.protect')}
               </button>
             )}
           </div>
@@ -348,7 +356,7 @@ export function PersonalSky() {
           className={`tab-btn ${activeTab === 'own' ? 'active' : ''}`}
           onClick={() => setActiveTab('own')}
         >
-          My Wishes ({skyData.ownWishes.length})
+          {t('personal.tabOwn')} ({localizeDigits(skyData.ownWishes.length, language)})
         </button>
         <button
           type="button"
@@ -357,7 +365,7 @@ export function PersonalSky() {
           className={`tab-btn ${activeTab === 'saved' ? 'active' : ''}`}
           onClick={() => setActiveTab('saved')}
         >
-          Saved Wishes ({skyData.savedWishes.length})
+          {t('personal.tabSaved')} ({localizeDigits(skyData.savedWishes.length, language)})
         </button>
         <button
           type="button"
@@ -366,17 +374,17 @@ export function PersonalSky() {
           className={`tab-btn ${activeTab === 'lighted' ? 'active' : ''}`}
           onClick={() => setActiveTab('lighted')}
         >
-          Light Sent ({skyData.lightedWishes.length})
+          {t('personal.tabLight')} ({localizeDigits(skyData.lightedWishes.length, language)})
         </button>
       </div>
 
       {error && <div className="error-message"><p>{error}</p></div>}
 
       {loading ? (
-        <p className="page-loading">Gathering your stars…</p>
+        <p className="page-loading">{t('personal.loading')}</p>
       ) : currentList.length === 0 ? (
         <div className="empty-state">
-          <p className="empty-title">The sky is quiet here.</p>
+          <p className="empty-title">{t('personal.emptyTitle')}</p>
           <p className="empty-desc">
             {activeTab === 'own' && "You haven't left a wish in the sky yet."}
             {activeTab === 'saved' && "You haven't saved any stranger's wish yet."}
@@ -392,7 +400,7 @@ export function PersonalSky() {
               className="recovery-link-btn"
               onClick={() => setShowRecoverModal(true)}
             >
-              Already have a sky? Recover it
+              {t('personal.recoverEntry')}
             </button>
           </div>
         </div>
@@ -404,14 +412,14 @@ export function PersonalSky() {
                 <blockquote className="personal-wish-text">"{wish.text}"</blockquote>
                 {wish.fulfilledAt && (
                   <div className="fulfillment-badge">
-                    <span className="fulfilled-tag">✦ Fulfilled</span>
+                    <span className="fulfilled-tag">{t('wish.fulfilled')}</span>
                     {wish.fulfillmentNote && (
                       <p className="fulfilled-note">"{wish.fulfillmentNote}"</p>
                     )}
                   </div>
                 )}
                 <div className="personal-wish-meta">
-                  <span className="category-pill">{wish.category}</span>
+                  <span className="category-pill">{categoryLabel(wish.category)}</span>
                   <span>{wish.reactions} light received</span>
                   {wish.createdAt && (
                     <span>• {new Date(wish.createdAt).toLocaleDateString()}</span>
@@ -425,7 +433,7 @@ export function PersonalSky() {
                   className="soft-button"
                   onClick={() => navigate(`/sky?wishId=${wish.id}`)}
                 >
-                  Locate Star
+                  {t('constellations.locateStar')}
                 </button>
 
                 {activeTab === 'saved' && (
@@ -434,7 +442,7 @@ export function PersonalSky() {
                     className="soft-button danger-hover"
                     onClick={() => handleUnsave(wish.id)}
                   >
-                    Unsave
+                    {t('personal.unsave')}
                   </button>
                 )}
 
@@ -447,18 +455,18 @@ export function PersonalSky() {
                       setFulfillNote('')
                     }}
                   >
-                    Mark as Fulfilled
+                    {t('personal.markFulfilled')}
                   </button>
                 )}
               </div>
 
               {fulfillingWishId === wish.id && (
                 <div className="fulfillment-inline-form">
-                  <p className="form-label">Add an optional note about what happened:</p>
+                  <p className="form-label">{t('personal.noteLabel')}</p>
                   <input
                     type="text"
                     maxLength={280}
-                    placeholder="It happened. I made it through."
+                    placeholder={t('personal.notePlaceholder')}
                     value={fulfillNote}
                     onChange={(e) => setFulfillNote(e.target.value)}
                     className="fulfill-input"
@@ -469,7 +477,7 @@ export function PersonalSky() {
                       className="primary"
                       onClick={() => handleFulfill(wish.id)}
                     >
-                      Confirm Fulfillment
+                      {t('personal.confirmFulfillment')}
                     </button>
                     <button
                       type="button"
@@ -490,7 +498,7 @@ export function PersonalSky() {
               className="recovery-link-btn"
               onClick={() => setShowRecoverModal(true)}
             >
-              Already have a sky? Recover it
+              {t('personal.recoverEntry')}
             </button>
           </div>
         </div>

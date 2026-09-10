@@ -3,12 +3,19 @@
 A quiet, anonymous digital universe where wishes become stars.
 
 ## Current milestone
-**Milestone 6: Naturalistic Star Placement & Real Depth**
+**Milestone 6.1: Depth-Driven Sky & Navigation UI**
 
-Phase 5 and 6 core product features from the project specification are implemented and verified:
-- **Interactive Galaxy**: 2D HTML5 canvas with smooth camera lerping, naturalistic star placement, per-star depth (parallax), star temperature hues, twinkle animations, and full reduced-motion accessibility.
+Refines the Milestone 6 depth work so the sky actually reads as three-dimensional, and adds in-sky navigation. (Note: this is distinct from the spec's *Phase 6 — Semantic Clustering*, which remains upcoming; see [docs/ROADMAP.md](docs/ROADMAP.md).)
+
+Phase 5 core product features plus the depth/navigation work are implemented and verified:
+- **Interactive Galaxy**: 2D HTML5 canvas where **depth is the dominant visual cue**. A star's stored depth (`z`) drives its radius (~3.5× spread front to back), opacity, core sharpness and twinkle amplitude, with per-star `size`/`brightness` applied only as a ±15% jitter — far stars are faint diffuse specks, near stars crisp points with a specular centre. Stars are drawn far-to-near (painter's algorithm).
+- **Parallax & perspective**: Camera panning is distributed across depth (0.45–1.50 pan factors), and zoom is per-depth, so zooming expands near layers faster than far ones. The galactic band and three ambient dust sheets are rendered **in-canvas** so they parallax with the sky rather than staying fixed to the viewport, with dust clustering along the same diagonal band the server biases star placement toward (`starPlacement.ts`).
+- **Constellation lines**: When a single constellation is in view (`?category=...`), its stars are connected into one shape via a minimum spanning tree over world-space distance — every star joins with a line to its nearest neighbour, with no full mesh and no orphans.
+- **Ambient idle drift**: After a few seconds without input the camera wanders gently on a bounded path so the sky feels alive; any interaction, an open selection, or `prefers-reduced-motion` suppresses it immediately.
+- **Find a wish**: Client-side keyword search in the sky's top bar filters the visible stars with a live match count, no extra API calls.
+- **Accessibility**: Full reduced-motion support (no twinkle, no drift, instant camera settle) and a screen-reader list mirroring the visible stars.
 - **Personal Sky (`/me`)**: Private three-tab sanctuary for tracking your own wishes, saved stranger wishes, and light sent history, with voluntary fulfillment actions and a **recovery-phrase flow** ("Already have a sky? Recover it") so the sky can be found again from a different browser/device without any account, email, or password.
-- **Keep this link**: Releasing a wish now surfaces a shareable `?wishId=...` deep-link so an anonymous author can return to their own wish later, independent of the recovery phrase.
+- **Keep this link**: Releasing a wish surfaces a shareable `?wishId=...` deep-link so an anonymous author can return to their own wish later, independent of the recovery phrase. The composer shows a live character count against the 280-character limit.
 - **The Morning Sky (`/morning-sky`)**: Serene dawn space showcasing wishes that came true (*"It happened."*) with personal fulfillment reflections.
 - **Constellations (`/constellations`)**: Thematic clustering across 6 core categories (Hope, Love, Peace, Healing, Growth, Clarity) with star counts and evocative descriptions.
 - **The Mirror (`/api/mirror` + `MirrorPanel`)**: Emotional resonance discovery finding related stranger wishes using PostgreSQL full-text search (`tsvector`), returning *"You're not the only one."*
@@ -79,9 +86,11 @@ npm run dev
 
 Open **`http://localhost:5173`**:
 - Click **"Enter the Sky"** to explore the celestial canvas.
+- **Drag** to pan and **scroll / pinch** to zoom — near stars shift and grow faster than distant ones. Leave it untouched for a few seconds and the sky drifts on its own.
 - Click any star to view its wish, send light, save it, or consult **✦ Mirror** echoes.
-- Click **"Leave a Wish"** to compose and release a wish as a new star into the universe.
-- Use the top navigation bar to explore **Constellations**, the **Morning Sky**, and your **Personal Sky**.
+- Use **"Find a wish…"** in the top bar to filter the sky down to stars matching a keyword.
+- Click **"Leave a Wish"** to compose and release a wish as a new star into the universe, then keep the returned link to find it again.
+- Use the top navigation bar to explore **Constellations**, the **Morning Sky**, and your **Personal Sky**. Opening a single constellation draws its stars connected into one shape.
 
 ## Key Commands
 
@@ -158,5 +167,5 @@ tests 8 | pass 8 | fail 0
 
 ---
 
-**Status:** Milestone 6 Complete  
+**Status:** Milestone 6.1 Complete  
 **Last updated:** 2026-09-10  

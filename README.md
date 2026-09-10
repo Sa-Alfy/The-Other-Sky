@@ -3,24 +3,25 @@
 A quiet, anonymous digital universe where wishes become stars.
 
 ## Current milestone
-**Milestone 5.1: Private-Wish Leak Fix & Auth Gap Documentation**
+**Milestone 6: Naturalistic Star Placement & Real Depth**
 
-Phase 5 core product features from the project specification are implemented and verified:
-- **Interactive Galaxy**: 2D HTML5 canvas with smooth camera lerping, star temperature hues, twinkle animations, and full reduced-motion accessibility.
-- **Personal Sky (`/me`)**: Private three-tab sanctuary for tracking your own wishes, saved stranger wishes, and light sent history, with voluntary fulfillment actions. *(Note: Personal Sky is currently tied to the anonymous session cookie only; there is no account recovery mechanism yet.)*
+Phase 5 and 6 core product features from the project specification are implemented and verified:
+- **Interactive Galaxy**: 2D HTML5 canvas with smooth camera lerping, naturalistic star placement, per-star depth (parallax), star temperature hues, twinkle animations, and full reduced-motion accessibility.
+- **Personal Sky (`/me`)**: Private three-tab sanctuary for tracking your own wishes, saved stranger wishes, and light sent history, with voluntary fulfillment actions and a **recovery-phrase flow** ("Already have a sky? Recover it") so the sky can be found again from a different browser/device without any account, email, or password.
+- **Keep this link**: Releasing a wish now surfaces a shareable `?wishId=...` deep-link so an anonymous author can return to their own wish later, independent of the recovery phrase.
 - **The Morning Sky (`/morning-sky`)**: Serene dawn space showcasing wishes that came true (*"It happened."*) with personal fulfillment reflections.
 - **Constellations (`/constellations`)**: Thematic clustering across 6 core categories (Hope, Love, Peace, Healing, Growth, Clarity) with star counts and evocative descriptions.
 - **The Mirror (`/api/mirror` + `MirrorPanel`)**: Emotional resonance discovery finding related stranger wishes using PostgreSQL full-text search (`tsvector`), returning *"You're not the only one."*
 - **Save / Unsave**: Instant wish saving into the user's private collection.
 - **Deep-linking & Navigation**: Direct navigation via `?wishId=...` and `?category=...`, with responsive navigation bar and smooth dialog dismissal.
 - **Durable Persistence & Moderation**: PostgreSQL 16 backing, automated spam screening, 3-report threshold flagging, and Bearer-token admin moderation.
-- **Privacy Enforcement (Milestone 5.1)**: Full isolation of private wishes across public listing, direct lookup, Morning Sky, Mirror echoes, and stranger saves.
+- **Privacy Enforcement**: Full isolation of private wishes across public listing, direct lookup, Morning Sky, Mirror echoes, and stranger saves.
 
 ## Stack
 - **Frontend**: React 19 + TypeScript + Vite + React Router DOM
 - **Backend**: Node.js + TypeScript + Express + Zod + pg
 - **Database**: PostgreSQL 16 (local or Supabase)
-- **Authentication**: Privacy-first anonymous cookie sessions (`othersky_sid`, no passwords, no email collection). *Personal Sky is currently tied to the anonymous session cookie only; there is no account recovery mechanism yet.*
+- **Authentication**: Privacy-first anonymous cookie sessions (`othersky_sid`, no passwords, no email collection), with an optional recovery-phrase flow to find your Personal Sky again from another browser or device.
 
 ## Prerequisites
 - PostgreSQL 12+ (or Supabase account)
@@ -133,10 +134,11 @@ It is:
 
 ### Frontend Suite (Vitest)
 ```text
-Test Files  3 passed (3)
-Tests       15 passed (15)
+Test Files  4 passed (4)
+Tests       22 passed (22)
 - App.test.tsx (6 tests)
 - GalaxyCanvas.test.tsx (2 tests)
+- PersonalSky.test.tsx (7 tests)
 - starColors.test.ts (7 tests)
 ```
 
@@ -156,5 +158,5 @@ tests 8 | pass 8 | fail 0
 
 ---
 
-**Status:** Milestone 5.1 Complete  
-**Last updated:** 2026-09-05  
+**Status:** Milestone 6 Complete  
+**Last updated:** 2026-09-10  

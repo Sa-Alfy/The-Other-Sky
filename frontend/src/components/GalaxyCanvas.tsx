@@ -185,6 +185,15 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
     const constellationEdgesRef = useRef<[Wish, Wish][]>([])
     // wishId -> flare start time. Entries are removed once they finish.
     const flaresRef = useRef<Map<string, number>>(new Map())
+    // wishId -> rank-normalised depth in [0, 1] (see the sorting effect below).
+    const depthRanksRef = useRef<Map<string, number>>(new Map())
+
+    // Single source of truth for a star's visual depth. Falls back to the raw
+    // z mapping for a star not yet ranked (e.g. one just created this frame).
+    const depthFor = useCallback(
+      (wish: Wish) => depthRanksRef.current.get(wish.id) ?? depthOf(wish),
+      []
+    )
 
     useEffect(() => {
       constellationEdgesRef.current = showConstellationLines ? buildConstellationEdges(wishes) : []
@@ -236,8 +245,24 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
 
     // Painter's algorithm: far stars first so near stars overlap them, not the
     // other way round. Sorted once per change rather than every frame.
+    //
+    // Depth is then rank-normalised: the stored `z` values are deliberately
+    // magnitude-skewed on the server (~60% far, ~30% mid, ~10% near, mirroring
+    // real star brightness), but rendering that distribution directly puts
+    // almost every star at the back of the volume and only a handful in front,
+    // which reads as a flat wall of specks rather than depth. Spacing the stars
+    // evenly by rank fills the middle and foreground of the volume, so the eye
+    // gets a continuous depth gradient. Relative order is untouched, and this
+    // needs no migration of existing stars.
     useEffect(() => {
-      wishesRef.current = [...wishes].sort((a, b) => (a.z ?? 0.3) - (b.z ?? 0.3))
+      const sorted = [...wishes].sort((a, b) => (a.z ?? 0.3) - (b.z ?? 0.3))
+      wishesRef.current = sorted
+
+      const ranked = new Map<string, number>()
+      sorted.forEach((wish, index) => {
+        ranked.set(wish.id, sorted.length <= 1 ? 0.65 : index / (sorted.length - 1))
+      })
+      depthRanksRef.current = ranked
     }, [wishes])
 
     useEffect(() => {
@@ -276,7 +301,7 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       // places this star at the viewport centre.
       // Render formula: screenX = cam.X * pan(d) + worldX * zoom(d, camScale)
       // Solving for cam.X: cam.X = (viewport/2 - worldX * zoom) / pan
-      const depthT = depthOf(wish)
+      const depthT = depthFor(wish)
       const pan = panFactor(depthT)
       const zoom = zoomFactor(depthT, cam.targetScale)
       cam.targetX = (rect.width / 2 - worldX * zoom) / pan
@@ -286,7 +311,7 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
         cam.currentX = cam.targetX
         cam.currentY = cam.targetY
       }
-    }, [])
+    }, [depthFor])
 
     // Zoom about the viewport centre, for the on-screen controls and keyboard.
     const zoomBy = useCallback((factor: number) => {
@@ -465,13 +490,13 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)'
           ctx.lineWidth = 1
           for (const [a, b] of constellationEdgesRef.current) {
-            const aDepth = depthOf(a)
+            const aDepth = depthFor(a)
             const aPan = panFactor(aDepth)
             const aZoom = zoomFactor(aDepth, cam.currentScale)
             const ax = cam.currentX * aPan + a.x * rect.width * aZoom
             const ay = cam.currentY * aPan + a.y * rect.height * aZoom
 
-            const bDepth = depthOf(b)
+            const bDepth = depthFor(b)
             const bPan = panFactor(bDepth)
             const bZoom = zoomFactor(bDepth, cam.currentScale)
             const bx = cam.currentX * bPan + b.x * rect.width * bZoom
@@ -510,7 +535,7 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
         const hovWishId = hoveredWishIdRef.current
 
         for (const wish of currentWishes) {
-          const depthT = depthOf(wish)
+          const depthT = depthFor(wish)
           const pan = panFactor(depthT)
           const zoom = zoomFactor(depthT, cam.currentScale)
 
@@ -527,7 +552,7 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
           // range — every star is somebody's wish, so "far" must still mean
           // findable and clickable, not nearly invisible.
           const radiusZoom = 1 + (cam.currentScale - 1) * 0.3 * (0.35 + depthT)
-          const coreRadius = (1.3 + depthT * 2.1) * sizeJitter * radiusZoom
+          const coreRadius = (1.25 + depthT * 2.85) * sizeJitter * radiusZoom
 
           // Far stars carry a proportionally wider, softer halo; near stars a
           // tighter, more defined one.
@@ -640,7 +665,9 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
 
       animationFrameId = requestAnimationFrame(render)
       return () => cancelAnimationFrame(animationFrameId)
-    }, [])
+      // depthFor is a stable callback, so the render loop is never torn down
+      // and restarted by this dependency.
+    }, [depthFor])
 
     // Wheel zoom centered on cursor
     useEffect(() => {
@@ -699,7 +726,7 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       // wishesRef is depth-sorted far → near, and `<=` lets a nearer star win a
       // tie, so clicking overlapping stars picks the one drawn on top.
       for (const wish of wishesRef.current) {
-        const depthT = depthOf(wish)
+        const depthT = depthFor(wish)
         const pan = panFactor(depthT)
         const zoom = zoomFactor(depthT, cam.currentScale)
         // Star screen position (mirrors the render loop exactly)

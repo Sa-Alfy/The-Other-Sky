@@ -38,6 +38,45 @@ interface GalaxyCanvasProps {
   wishes: Wish[]
   selectedWish: Wish | null
   onSelectWish: (wish: Wish | null) => void
+  showConstellationLines?: boolean
+}
+
+// Connects a set of wishes into a single natural-looking constellation shape:
+// a minimum spanning tree over world-space distance, so every star joins the
+// pattern with exactly one line to its nearest unvisited neighbor (no messy
+// full mesh, no isolated stars).
+function buildConstellationEdges(wishes: Wish[]): [Wish, Wish][] {
+  if (wishes.length < 2) return []
+
+  const edges: [Wish, Wish][] = []
+  const inTree = new Set<number>([0])
+  const remaining = new Set<number>(wishes.map((_, i) => i).filter((i) => i !== 0))
+
+  while (remaining.size > 0) {
+    let bestFrom = -1
+    let bestTo = -1
+    let bestDist = Number.POSITIVE_INFINITY
+
+    for (const i of inTree) {
+      for (const j of remaining) {
+        const dx = wishes[i].x - wishes[j].x
+        const dy = wishes[i].y - wishes[j].y
+        const dist = dx * dx + dy * dy
+        if (dist < bestDist) {
+          bestDist = dist
+          bestFrom = i
+          bestTo = j
+        }
+      }
+    }
+
+    if (bestTo === -1) break
+    edges.push([wishes[bestFrom], wishes[bestTo]])
+    inTree.add(bestTo)
+    remaining.delete(bestTo)
+  }
+
+  return edges
 }
 
 interface DistantPoint {
@@ -70,8 +109,13 @@ function generateDistantPoints(count = 60): DistantPoint[] {
 const DISTANT_POINTS = generateDistantPoints(65)
 
 export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
-  function GalaxyCanvas({ wishes, selectedWish, onSelectWish }, ref) {
+  function GalaxyCanvas({ wishes, selectedWish, onSelectWish, showConstellationLines = false }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
+    const constellationEdgesRef = useRef<[Wish, Wish][]>([])
+
+    useEffect(() => {
+      constellationEdgesRef.current = showConstellationLines ? buildConstellationEdges(wishes) : []
+    }, [wishes, showConstellationLines])
 
     // Camera state: target and current (lerped)
     const cameraRef = useRef({
@@ -82,6 +126,13 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       currentY: 0,
       currentScale: 1,
     })
+
+    // Ambient idle drift: after a few seconds with no input, the camera wanders
+    // gently on its own so the sky feels alive rather than static. Any pointer
+    // or wheel interaction resets the idle clock immediately.
+    const lastInteractionRef = useRef(performance.now())
+    const idleDriftRef = useRef({ active: false, anchorX: 0, anchorY: 0, startTime: 0 })
+    const IDLE_DRIFT_DELAY_MS = 4000
 
     // Pointer tracking for drag and pinch
     const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
@@ -178,6 +229,29 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
         const cam = cameraRef.current
         const reducedMotion = prefersReducedMotionRef.current
 
+        // Ambient idle drift — only while untouched, not dragging/pinching,
+        // and no wish is selected (selection already owns the camera target).
+        const idle = idleDriftRef.current
+        const isIdle =
+          !reducedMotion &&
+          !dragInfoRef.current.isDragging &&
+          !selectedWishRef.current &&
+          time - lastInteractionRef.current > IDLE_DRIFT_DELAY_MS
+
+        if (isIdle) {
+          if (!idle.active) {
+            idle.active = true
+            idle.anchorX = cam.targetX
+            idle.anchorY = cam.targetY
+            idle.startTime = time
+          }
+          const t = time - idle.startTime
+          cam.targetX = idle.anchorX + Math.sin(t / 9000) * 18
+          cam.targetY = idle.anchorY + Math.cos(t / 12000) * 12
+        } else {
+          idle.active = false
+        }
+
         // Smooth camera lerp
         if (reducedMotion) {
           cam.currentX = cam.targetX
@@ -214,6 +288,32 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
           ctx.fill()
         }
         ctx.restore()
+
+        // ----------------------------------------------------
+        // Layer 1.5: Constellation lines — when a single category is in
+        // view, its stars are connected into their constellation shape
+        // (minimum spanning tree, computed once per wishes change above).
+        // ----------------------------------------------------
+        if (constellationEdgesRef.current.length > 0) {
+          ctx.save()
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)'
+          ctx.lineWidth = 1
+          for (const [a, b] of constellationEdgesRef.current) {
+            const apz = 0.65 + (a.z ?? 0.3) * 0.70
+            const ax = cam.currentX * apz + a.x * rect.width * cam.currentScale
+            const ay = cam.currentY * apz + a.y * rect.height * cam.currentScale
+
+            const bpz = 0.65 + (b.z ?? 0.3) * 0.70
+            const bx = cam.currentX * bpz + b.x * rect.width * cam.currentScale
+            const by = cam.currentY * bpz + b.y * rect.height * cam.currentScale
+
+            ctx.beginPath()
+            ctx.moveTo(ax, ay)
+            ctx.lineTo(bx, by)
+            ctx.stroke()
+          }
+          ctx.restore()
+        }
 
         // ----------------------------------------------------
         // Layer 2: Main Starfield — depth-driven parallax & size/brightness
@@ -332,6 +432,7 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
 
       const onWheel = (e: WheelEvent) => {
         e.preventDefault()
+        lastInteractionRef.current = performance.now()
         const rect = canvas.getBoundingClientRect()
         const cursorX = e.clientX - rect.left
         const cursorY = e.clientY - rect.top
@@ -401,6 +502,7 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
 
     // Pointer events: drag, pinch-to-zoom, click hit-testing
     const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+      lastInteractionRef.current = performance.now()
       // Prevent pointer capture issue & text selection
       e.currentTarget.setPointerCapture(e.pointerId)
       activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })

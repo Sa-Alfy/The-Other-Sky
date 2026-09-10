@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import './App.css'
 import { GalaxyCanvas, type GalaxyCanvasRef, type Wish } from './components/GalaxyCanvas'
@@ -24,6 +24,7 @@ function GalaxyView() {
   const [showMirror, setShowMirror] = useState(false)
   const [releaseLink, setReleaseLink] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const galaxyCanvasRef = useRef<GalaxyCanvasRef>(null)
 
   const [searchParams, setSearchParams] = useSearchParams()
@@ -228,6 +229,12 @@ function GalaxyView() {
 
   const selectedSummary = selectedWish?.text ?? 'No wish selected yet.'
 
+  const trimmedQuery = searchQuery.trim().toLowerCase()
+  const visibleWishes = useMemo(() => {
+    if (!trimmedQuery) return wishes
+    return wishes.filter((wish) => wish.text.toLowerCase().includes(trimmedQuery))
+  }, [wishes, trimmedQuery])
+
   return (
     <div className="app-shell">
       {!hasEntered && location.pathname === '/' ? (
@@ -294,13 +301,14 @@ function GalaxyView() {
 
           <GalaxyCanvas
             ref={galaxyCanvasRef}
-            wishes={wishes}
+            wishes={visibleWishes}
             selectedWish={selectedWish}
             onSelectWish={handleSelectWish}
+            showConstellationLines={Boolean(filterCategory)}
           />
 
           <ul className="sr-only" aria-label="Wishes in the sky">
-            {wishes.map((wish) => (
+            {visibleWishes.map((wish) => (
               <li key={wish.id}>
                 <button type="button" onClick={() => handleSelectWish(wish)}>
                   Open wish: {wish.text}
@@ -329,6 +337,24 @@ function GalaxyView() {
             </nav>
 
             <div className="mini-actions">
+              <div className="sky-search">
+                <label className="sr-only" htmlFor="sky-search-input">
+                  Find a wish by keyword
+                </label>
+                <input
+                  id="sky-search-input"
+                  type="search"
+                  className="sky-search-input"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Find a wish…"
+                />
+                {trimmedQuery && (
+                  <span className="sky-search-count" aria-live="polite">
+                    {visibleWishes.length}
+                  </span>
+                )}
+              </div>
               <button type="button" className="soft-button" onClick={() => setIsComposerOpen(true)}>
                 Leave a Wish
               </button>
@@ -465,6 +491,12 @@ function GalaxyView() {
                 maxLength={280}
                 placeholder="I hope future me is kinder to myself."
               />
+              <div
+                className={`composer-counter ${draft.length > 260 ? 'composer-counter--near-limit' : ''}`}
+                aria-live="polite"
+              >
+                {draft.length} / 280
+              </div>
               <div className="composer-footer">
                 <select value={category} onChange={(event) => setCategory(event.target.value)}>
                   <option value="hope">Hope</option>

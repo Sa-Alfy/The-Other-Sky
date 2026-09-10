@@ -79,7 +79,27 @@ function buildConstellationEdges(wishes: Wish[]): [Wish, Wish][] {
   return edges
 }
 
-interface DistantPoint {
+// Normalises a star's stored depth (z ∈ [0.1, 1.0]) to 0 = farthest, 1 = nearest.
+// Every depth-driven visual property below is derived from this single value so
+// the layers stay consistent with each other.
+function depthOf(wish: Wish): number {
+  const z = wish.z ?? 0.3
+  return Math.max(0, Math.min(1, (z - 0.1) / 0.9))
+}
+
+// How much of a camera pan a layer inherits. Far layers barely move, near ones
+// overshoot — the wider this spread, the stronger the sense of volume.
+function panFactor(depthT: number): number {
+  return 0.45 + depthT * 1.05
+}
+
+// Perspective: zooming in expands near layers much faster than far ones, so the
+// sky opens up around you instead of scaling like a flat image.
+function zoomFactor(depthT: number, cameraScale: number): number {
+  return 1 + (cameraScale - 1) * (0.55 + depthT * 0.85)
+}
+
+interface DustPoint {
   x: number
   y: number
   radius: number
@@ -89,24 +109,49 @@ interface DistantPoint {
   l: number
 }
 
-// Generate static deterministic distant atmospheric points for parallax
-function generateDistantPoints(count = 60): DistantPoint[] {
-  const points: DistantPoint[] = []
-  for (let i = 0; i < count; i++) {
-    const seed = hashString(`distant-star-${i}`)
-    // Coordinate spread from -0.4 to 1.6
-    const x = -0.4 + ((seed % 1000) / 1000) * 2.0
-    const y = -0.4 + (((seed >>> 10) % 1000) / 1000) * 2.0
-    const radius = 2.5 + (((seed >>> 20) % 100) / 100) * 2.5
-    const opacity = 0.08 + (((seed >>> 24) % 100) / 100) * 0.10 // 0.08 to 0.18
-    const hue = (seed % 360)
-    const color = getStarTemperatureColor(hue)
-    points.push({ x, y, radius, opacity, ...color })
-  }
-  return points
+interface DustLayer {
+  points: DustPoint[]
+  depthT: number
 }
 
-const DISTANT_POINTS = generateDistantPoints(65)
+// Deterministic ambient dust. Several layers at different depths (rather than a
+// single flat sheet) are what make the emptiness between wish-stars read as
+// space with volume instead of a dark backdrop.
+function generateDustLayer(key: string, count: number, depthT: number): DustLayer {
+  const points: DustPoint[] = []
+  for (let i = 0; i < count; i++) {
+    const seed = hashString(`${key}-${i}`)
+    // Spread well beyond the viewport so panning never reveals an edge.
+    const x = -0.6 + ((seed % 1000) / 1000) * 2.2
+    const rawY = -0.6 + (((seed >>> 10) % 1000) / 1000) * 2.2
+    // Pull each point partway toward the galactic band so the band reads as a
+    // dense drift of faint stars rather than a flat grey gradient, while the
+    // rest of the sky still stays populated.
+    const bandY = 0.25 + 0.5 * x
+    const pull = (((seed >>> 6) % 100) / 100) * 0.55
+    const y = rawY + (bandY - rawY) * pull
+    // Farther layers are finer and fainter.
+    const radius = 0.5 + (((seed >>> 20) % 100) / 100) * (0.5 + depthT * 1.6)
+    const opacity = (0.05 + (((seed >>> 24) % 100) / 100) * 0.13) * (0.55 + depthT * 0.75)
+    const color = getStarTemperatureColor(seed % 360)
+    points.push({ x, y, radius, opacity, ...color })
+  }
+  return { points, depthT }
+}
+
+const DUST_LAYERS: DustLayer[] = [
+  generateDustLayer('dust-far', 120, 0.05),
+  generateDustLayer('dust-mid', 80, 0.25),
+  generateDustLayer('dust-near', 45, 0.45),
+]
+
+// A soft diagonal galactic band along y ≈ 0.25 + 0.5x — the same band the
+// server biases star placement toward (see starPlacement.ts), so the glow sits
+// where the stars actually cluster instead of fighting them.
+const BAND_NODES = Array.from({ length: 7 }).map((_, i) => {
+  const t = i / 6
+  return { x: -0.1 + t * 1.2, y: 0.25 + 0.5 * (-0.1 + t * 1.2) }
+})
 
 export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
   function GalaxyCanvas({ wishes, selectedWish, onSelectWish, showConstellationLines = false }, ref) {
@@ -130,7 +175,10 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
     // Ambient idle drift: after a few seconds with no input, the camera wanders
     // gently on its own so the sky feels alive rather than static. Any pointer
     // or wheel interaction resets the idle clock immediately.
-    const lastInteractionRef = useRef(performance.now())
+    // 0 = never interacted; the render loop compares against its own
+    // requestAnimationFrame timestamp, which shares performance.now()'s clock,
+    // so drift begins IDLE_DRIFT_DELAY_MS after load until the first input.
+    const lastInteractionRef = useRef(0)
     const idleDriftRef = useRef({ active: false, anchorX: 0, anchorY: 0, startTime: 0 })
     const IDLE_DRIFT_DELAY_MS = 4000
 
@@ -151,8 +199,10 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
     const selectedWishRef = useRef(selectedWish)
     const hoveredWishIdRef = useRef(hoveredWishId)
 
+    // Painter's algorithm: far stars first so near stars overlap them, not the
+    // other way round. Sorted once per change rather than every frame.
     useEffect(() => {
-      wishesRef.current = wishes
+      wishesRef.current = [...wishes].sort((a, b) => (a.z ?? 0.3) - (b.z ?? 0.3))
     }, [wishes])
 
     useEffect(() => {
@@ -189,12 +239,13 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
 
       // Invert the parallax render formula to find the camera translation that
       // places this star at the viewport centre.
-      // Render formula: screenX = cam.X * p(z) + worldX * cam.scale
-      // Solving for cam.X: cam.X = (viewport/2 - worldX * cam.scale) / p(z)
-      const z = wish.z ?? 0.3
-      const pz = 0.65 + z * 0.70
-      cam.targetX = (rect.width / 2 - worldX * cam.targetScale) / pz
-      cam.targetY = (rect.height / 2 - worldY * cam.targetScale) / pz
+      // Render formula: screenX = cam.X * pan(d) + worldX * zoom(d, camScale)
+      // Solving for cam.X: cam.X = (viewport/2 - worldX * zoom) / pan
+      const depthT = depthOf(wish)
+      const pan = panFactor(depthT)
+      const zoom = zoomFactor(depthT, cam.targetScale)
+      cam.targetX = (rect.width / 2 - worldX * zoom) / pan
+      cam.targetY = (rect.height / 2 - worldY * zoom) / pan
 
       if (instant || prefersReducedMotionRef.current) {
         cam.currentX = cam.targetX
@@ -269,25 +320,64 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
         ctx.clearRect(0, 0, rect.width, rect.height)
 
         // ----------------------------------------------------
-        // Layer 1: Distant Parallax Atmosphere Layer (35% speed)
+        // Layer 0: Galactic band — the deepest layer, so it barely shifts.
+        // Drawn in-canvas (not as a CSS background) so it pans with the sky;
+        // a viewport-fixed glow reads as a smudge on the screen the moment
+        // the user drags.
         // ----------------------------------------------------
-        ctx.save()
-        ctx.translate(cam.currentX * 0.35, cam.currentY * 0.35)
-        const parallaxScale = 1 + (cam.currentScale - 1) * 0.15
-        ctx.scale(parallaxScale, parallaxScale)
+        {
+          const bandDepth = 0.02
+          const pan = panFactor(bandDepth)
+          const zoom = zoomFactor(bandDepth, cam.currentScale)
+          // Each node is drawn as an ellipse elongated ALONG the band axis and
+          // squashed across it, so the nodes fuse into one continuous diagonal
+          // band with a visible edge — plain circles just wash the whole frame.
+          const bandAngle = Math.atan2(0.5 * rect.height, rect.width)
+          const bandRadius = Math.max(rect.width, rect.height) * 0.32 * zoom
 
-        for (const pt of DISTANT_POINTS) {
-          const px = pt.x * rect.width
-          const py = pt.y * rect.height
-          const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, pt.radius * 3)
-          glowGrad.addColorStop(0, `hsla(${pt.h}, ${pt.s}%, ${pt.l}%, ${pt.opacity})`)
-          glowGrad.addColorStop(1, `hsla(${pt.h}, ${pt.s}%, ${pt.l}%, 0)`)
-          ctx.fillStyle = glowGrad
-          ctx.beginPath()
-          ctx.arc(px, py, pt.radius * 3, 0, Math.PI * 2)
-          ctx.fill()
+          for (const node of BAND_NODES) {
+            const nx = cam.currentX * pan + node.x * rect.width * zoom
+            const ny = cam.currentY * pan + node.y * rect.height * zoom
+
+            ctx.save()
+            ctx.translate(nx, ny)
+            ctx.rotate(bandAngle)
+            ctx.scale(1, 0.34)
+            const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, bandRadius)
+            grad.addColorStop(0, 'rgba(108, 130, 200, 0.075)')
+            grad.addColorStop(0.5, 'rgba(80, 98, 158, 0.03)')
+            grad.addColorStop(1, 'rgba(62, 76, 130, 0)')
+            ctx.fillStyle = grad
+            ctx.beginPath()
+            ctx.arc(0, 0, bandRadius, 0, Math.PI * 2)
+            ctx.fill()
+            ctx.restore()
+          }
         }
-        ctx.restore()
+
+        // ----------------------------------------------------
+        // Layer 1: Ambient dust — three sheets at increasing depth, each
+        // inheriting more of the camera pan than the one behind it.
+        // ----------------------------------------------------
+        for (const layer of DUST_LAYERS) {
+          const pan = panFactor(layer.depthT)
+          const zoom = zoomFactor(layer.depthT, cam.currentScale)
+
+          for (const pt of layer.points) {
+            const px = cam.currentX * pan + pt.x * rect.width * zoom
+            const py = cam.currentY * pan + pt.y * rect.height * zoom
+            if (px < -40 || px > rect.width + 40 || py < -40 || py > rect.height + 40) continue
+
+            const r = pt.radius * (1 + (zoom - 1) * 0.5)
+            const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, r * 3)
+            glowGrad.addColorStop(0, `hsla(${pt.h}, ${pt.s}%, ${pt.l}%, ${pt.opacity})`)
+            glowGrad.addColorStop(1, `hsla(${pt.h}, ${pt.s}%, ${pt.l}%, 0)`)
+            ctx.fillStyle = glowGrad
+            ctx.beginPath()
+            ctx.arc(px, py, r * 3, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        }
 
         // ----------------------------------------------------
         // Layer 1.5: Constellation lines — when a single category is in
@@ -299,13 +389,17 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)'
           ctx.lineWidth = 1
           for (const [a, b] of constellationEdgesRef.current) {
-            const apz = 0.65 + (a.z ?? 0.3) * 0.70
-            const ax = cam.currentX * apz + a.x * rect.width * cam.currentScale
-            const ay = cam.currentY * apz + a.y * rect.height * cam.currentScale
+            const aDepth = depthOf(a)
+            const aPan = panFactor(aDepth)
+            const aZoom = zoomFactor(aDepth, cam.currentScale)
+            const ax = cam.currentX * aPan + a.x * rect.width * aZoom
+            const ay = cam.currentY * aPan + a.y * rect.height * aZoom
 
-            const bpz = 0.65 + (b.z ?? 0.3) * 0.70
-            const bx = cam.currentX * bpz + b.x * rect.width * cam.currentScale
-            const by = cam.currentY * bpz + b.y * rect.height * cam.currentScale
+            const bDepth = depthOf(b)
+            const bPan = panFactor(bDepth)
+            const bZoom = zoomFactor(bDepth, cam.currentScale)
+            const bx = cam.currentX * bPan + b.x * rect.width * bZoom
+            const by = cam.currentY * bPan + b.y * rect.height * bZoom
 
             ctx.beginPath()
             ctx.moveTo(ax, ay)
@@ -316,83 +410,95 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
         }
 
         // ----------------------------------------------------
-        // Layer 2: Main Starfield — depth-driven parallax & size/brightness
+        // Layer 2: Main Starfield
         // ----------------------------------------------------
-        // Each star has a depth z ∈ [0.1, 1.0]:
-        //   - z near 0 = far/dim, slow parallax
-        //   - z near 1 = near/bright, fast parallax
+        // Depth (z ∈ [0.1, 1.0], normalised to depthT ∈ [0, 1]) is the DOMINANT
+        // visual cue — it drives position, size, opacity and focus. The stored
+        // per-star `size`/`brightness` are applied only as a narrow ±15% jitter
+        // on top: when they were allowed to dominate, a large-but-far star
+        // rendered identically to a small-but-near one and the depth signal
+        // cancelled out entirely, flattening the sky.
         //
-        // Parallax factor p(z) governs how much of the camera pan each star
-        // inherits. The ambient dust layer uses a fixed 0.35 pan-fraction; wish
-        // stars are distributed across 0.65–1.35 depending on z, bridging
-        // naturally from the dust layer through to a "foreground" feel.
-        //
-        // IMPORTANT — zoom-to-cursor centering is NOT per-star: it operates
-        // purely on cam.currentScale/X/Y (the wheel/pinch handlers touch only
-        // camera state, never any star's z). Near stars visually shift faster
-        // during a pan, but a zoom-toward-cursor always resolves around the
-        // camera pivot — there is no ambiguity between layers.
+        // Far stars: small, faint, diffuse (mostly halo, no hard core).
+        // Near stars: large, bright, crisp core with a tight halo.
+        // This mimics atmospheric perspective / depth-of-field, which is what
+        // actually sells depth in a static frame — parallax only sells it while
+        // the camera is moving.
         //
         // The 5px drag-vs-click threshold (handlePointerMove) fires on raw
         // pointer delta in screen space, before any world or parallax transform,
-        // and is therefore completely unaffected by the parallax model.
+        // and is therefore unaffected by the parallax model.
 
         const currentWishes = wishesRef.current
         const selWish = selectedWishRef.current
         const hovWishId = hoveredWishIdRef.current
 
         for (const wish of currentWishes) {
-          const z = wish.z ?? 0.3
-          // p(z): parallax fraction applied to camera translation
-          // Far stars (z≈0.1) → p≈0.72; near stars (z≈1.0) → p≈1.35
-          const pz = 0.65 + z * 0.70
+          const depthT = depthOf(wish)
+          const pan = panFactor(depthT)
+          const zoom = zoomFactor(depthT, cam.currentScale)
 
-          // Star screen position: parallax applied to camera translation only.
-          // Camera scale is a single world-space multiplier — zoom-to-cursor
-          // continues to operate on cam.currentScale without any per-star split.
-          const wx = cam.currentX * pz + wish.x * rect.width * cam.currentScale
-          const wy = cam.currentY * pz + wish.y * rect.height * cam.currentScale
+          const wx = cam.currentX * pan + wish.x * rect.width * zoom
+          const wy = cam.currentY * pan + wish.y * rect.height * zoom
 
-          // Depth modulation: near stars slightly larger and brighter (±20-25%)
-          const depthMod = 0.78 + 0.44 * z // 0.78 at z=0.1 → 1.22 at z=1.0
+          // Narrow per-star jitter so stars aren't mechanically uniform, while
+          // leaving depth firmly in charge of the hierarchy.
+          const clampedSize = Math.max(1.2, Math.min(2.8, wish.size))
+          const sizeJitter = 0.85 + ((clampedSize - 1.2) / 1.6) * 0.3
 
-          // Core radius modulated by depth as well as wish.size
-          const clampedSize = Math.max(0.8, Math.min(2.5, wish.size))
-          const coreRadius = (1.5 + (clampedSize - 0.8) * 0.88) * depthMod
-          const glowRadius = coreRadius * 3.5
+          // Radius: ~1px at the back, ~3.4px at the front — a 3.5x spread that
+          // is legible at a glance. Zoom enlarges near stars faster than far.
+          const radiusZoom = 1 + (cam.currentScale - 1) * 0.3 * (0.35 + depthT)
+          const coreRadius = (0.85 + depthT * 2.5) * sizeJitter * radiusZoom
 
-          // Restrained color mapping
+          // Far stars carry a proportionally wider, softer halo; near stars a
+          // tighter, more defined one.
+          const glowRadius = coreRadius * (4.6 - depthT * 1.9)
+
           const color = getStarTemperatureColor(wish.hue)
 
-          // Base opacity hierarchy from brightness, further modulated by depth
-          const clampedBrightness = Math.max(0.5, Math.min(1.5, wish.brightness))
-          const baseOpacity = (0.6 + ((clampedBrightness - 0.5) / 1.0) * 0.4) * depthMod
+          const clampedBrightness = Math.max(0.8, Math.min(1.3, wish.brightness))
+          const brightnessJitter = 0.92 + ((clampedBrightness - 0.8) / 0.5) * 0.16
+          const baseOpacity = (0.26 + depthT * 0.64) * brightnessJitter
 
-          // Twinkle animation (skip when reduced motion)
+          // Twinkle: near/bright stars scintillate more visibly than faint ones.
           let twinkleFactor = 0
           if (!reducedMotion) {
             const { phase, period } = getStarTwinkleProps(wish.id)
-            twinkleFactor = Math.sin((time / period) * Math.PI * 2 + phase) * 0.12
+            const amplitude = 0.06 + depthT * 0.13
+            twinkleFactor = Math.sin((time / period) * Math.PI * 2 + phase) * amplitude
           }
-          const alpha = Math.max(0.2, Math.min(1.0, baseOpacity * (1 + twinkleFactor)))
+          const alpha = Math.max(0.08, Math.min(1.0, baseOpacity * (1 + twinkleFactor)))
 
-          // 1. Soft radial glow
-          const glow = ctx.createRadialGradient(wx, wy, coreRadius * 0.4, wx, wy, glowRadius)
-          glow.addColorStop(0, `hsla(${color.h}, ${color.s}%, ${color.l}%, ${0.6 * alpha})`)
-          glow.addColorStop(0.45, `hsla(${color.h}, ${color.s}%, ${color.l}%, ${0.18 * alpha})`)
+          // 1. Soft radial halo
+          const glow = ctx.createRadialGradient(wx, wy, coreRadius * 0.25, wx, wy, glowRadius)
+          glow.addColorStop(0, `hsla(${color.h}, ${color.s}%, ${color.l}%, ${0.55 * alpha})`)
+          glow.addColorStop(0.4, `hsla(${color.h}, ${color.s}%, ${color.l}%, ${0.16 * alpha})`)
           glow.addColorStop(1, `hsla(${color.h}, ${color.s}%, ${color.l}%, 0)`)
           ctx.fillStyle = glow
           ctx.beginPath()
           ctx.arc(wx, wy, glowRadius, 0, Math.PI * 2)
           ctx.fill()
 
-          // 2. Small solid core
-          ctx.fillStyle = `hsla(${color.h}, ${color.s}%, ${color.l}%, ${alpha})`
+          // 2. Core — fades in with proximity, so distant stars stay diffuse
+          // specks instead of hard dots pretending to be close.
+          const coreStrength = Math.min(1, 0.25 + depthT * 1.25)
+          ctx.fillStyle = `hsla(${color.h}, ${color.s}%, ${color.l}%, ${alpha * coreStrength})`
           ctx.beginPath()
           ctx.arc(wx, wy, coreRadius, 0, Math.PI * 2)
           ctx.fill()
 
-          // 3. Selection ring outline (thin, low-opacity, pulsing slowly per 7.1)
+          // 3. Specular pinpoint on the nearest stars only — the detail that
+          // makes the front layer read as genuinely closer to the viewer.
+          if (depthT > 0.6) {
+            const hotspot = (depthT - 0.6) / 0.4
+            ctx.fillStyle = `hsla(${color.h}, ${Math.round(color.s * 0.4)}%, 98%, ${alpha * hotspot * 0.85})`
+            ctx.beginPath()
+            ctx.arc(wx, wy, coreRadius * 0.4, 0, Math.PI * 2)
+            ctx.fill()
+          }
+
+          // 4. Selection ring outline (thin, low-opacity, pulsing slowly per 7.1)
           const isSelected = selWish?.id === wish.id
           const isHovered = hovWishId === wish.id
 
@@ -479,19 +585,23 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       let nearest: Wish | null = null
       let minDistance = Number.POSITIVE_INFINITY
 
+      // wishesRef is depth-sorted far → near, and `<=` lets a nearer star win a
+      // tie, so clicking overlapping stars picks the one drawn on top.
       for (const wish of wishesRef.current) {
-        const z = wish.z ?? 0.3
-        const pz = 0.65 + z * 0.70
+        const depthT = depthOf(wish)
+        const pan = panFactor(depthT)
+        const zoom = zoomFactor(depthT, cam.currentScale)
         // Star screen position (mirrors the render loop exactly)
-        const wx = cam.currentX * pz + wish.x * rect.width * cam.currentScale
-        const wy = cam.currentY * pz + wish.y * rect.height * cam.currentScale
+        const wx = cam.currentX * pan + wish.x * rect.width * zoom
+        const wy = cam.currentY * pan + wish.y * rect.height * zoom
 
         const screenDist = Math.hypot(wx - screenX, wy - screenY)
 
-        // Tolerance in screen pixels: forgiving when zoomed out, tight when zoomed in
-        const toleranceScreen = Math.max(22, wish.size * 10)
+        // Tolerance tracks the rendered size: near stars are visibly larger and
+        // so get a correspondingly larger tap target.
+        const toleranceScreen = 18 + depthT * 14
 
-        if (screenDist <= toleranceScreen && screenDist < minDistance) {
+        if (screenDist <= toleranceScreen && screenDist <= minDistance) {
           minDistance = screenDist
           nearest = wish
         }

@@ -115,28 +115,30 @@ button {
   min-width: 150px;
 }
 
+/* Deep-space ground only. The galactic glow and all star/dust layers are drawn
+   in-canvas so they pan with the camera — a viewport-fixed CSS glow stays
+   glued to the screen while the sky moves underneath it, which instantly
+   flattens the depth illusion. */
 .galaxy-screen {
   position: relative;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 50% 40%, rgba(88, 111, 180, 0.17), transparent 25%),
-    linear-gradient(180deg, rgba(4, 7, 13, 0.95), rgba(2, 4, 8, 0.98));
+    radial-gradient(ellipse 120% 80% at 50% 120%, rgba(18, 24, 44, 0.55), transparent 70%),
+    linear-gradient(180deg, #05080f 0%, #030509 60%, #02040a 100%);
   overflow: hidden;
 }
 
+/* Subtle static vignette — pulls the eye toward the centre of the sky and
+   hides the canvas edges. Non-interactive and depth-neutral. */
 .sky-overlay {
   position: absolute;
   inset: 0;
-  background-image:
-    radial-gradient(2px 2px at 20% 28%, rgba(255,255,255,0.8), transparent),
-    radial-gradient(2px 2px at 40% 62%, rgba(255,255,255,0.7), transparent),
-    radial-gradient(2px 2px at 80% 25%, rgba(255,255,255,0.8), transparent),
-    radial-gradient(2px 2px at 58% 75%, rgba(255,255,255,0.7), transparent),
-    radial-gradient(2px 2px at 75% 68%, rgba(255,255,255,0.9), transparent),
-    radial-gradient(2px 2px at 12% 72%, rgba(255,255,255,0.7), transparent),
-    radial-gradient(2px 2px at 90% 50%, rgba(255,255,255,0.8), transparent);
-  opacity: 0.8;
-  animation: drift 18s ease-in-out infinite alternate;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 75% 65% at 50% 50%,
+    transparent 45%,
+    rgba(2, 4, 9, 0.55) 100%
+  );
 }
 
 .starfield {

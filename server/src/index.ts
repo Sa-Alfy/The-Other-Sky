@@ -1,0 +1,469 @@
+import cors from 'cors';
+import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
+import express, { Request, Response } from 'express';
+import { z } from 'zod';
+import {
+  addLight,
+  createWish,
+  fulfillWish,
+  getFulfilledWishes,
+  getMirrorWishes,
+  getModerationQueue,
+  getPersonalSky,
+  getWishById,
+  listConstellations,
+  listWishes,
+  moderateWish,
+  reportWish,
+  saveWish,
+  unsaveWish,
+  createRecoveryPhrase,
+  recoverUserByPhrase,
+} from './storageDb';
+import { generateAnonymousId, safeErrorMessage } from './utils';
+
+dotenv.config();
+
+const app = express();
+const port = Number(process.env.PORT ?? 3001);
+
+// Validation schemas
+const createWishSchema = z.object({
+  text: z.string().trim().min(3, 'Wish must be at least 3 characters').max(280, 'Wish must be 280 characters or less'),
+  category: z.string().trim().max(50).optional(),
+  visibility: z.enum(['public', 'private']).optional(),
+});
+
+const lightSchema = z.object({
+  wishId: z.string().min(1, 'Wish ID required'),
+});
+
+const reportSchema = z.object({ reason: z.string().trim().max(500).optional() });
+const moderationSchema = z.object({ action: z.enum(['approve', 'reject']) });
+const fulfillSchema = z.object({ note: z.string().trim().max(280).optional() });
+const recoverSchema = z.object({ phrase: z.string().trim().min(1, 'Phrase is required') });
+
+export const sessionCookieName = 'othersky_sid';
+const frontendOrigin = process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173';
+export const ipBackstop = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { success: false, error: { code: 'RATE_LIMITED', message: 'Please wait before trying again.' } },
+});
+
+export const recoverRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: 'RATE_LIMITED', message: 'Too many recovery attempts. Please try again later.' },
+  },
+});
+
+function parseCookie(header: string | undefined, name: string): string | undefined {
+  return header?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
+}
+
+function requireAdmin(req: Request, res: Response, next: () => void) {
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected || req.header('authorization') !== `Bearer ${expected}`) {
+    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Admin authorization required.' } });
+    return;
+  }
+  next();
+}
+
+// Middleware
+app.use(cors({ origin: frontendOrigin, credentials: true }));
+app.use(express.json({ limit: '1mb' }));
+
+// Session middleware: get or create anonymous ID
+app.use((req: Request, res: Response, next) => {
+  if (req.path === '/api/me/recover') {
+    next();
+    return;
+  }
+
+  let anonymousId = parseCookie(req.header('cookie'), sessionCookieName);
+
+  if (!anonymousId) {
+    anonymousId = generateAnonymousId();
+    res.cookie(sessionCookieName, anonymousId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 365,
+      path: '/',
+    });
+  }
+
+  (req as any).anonymousId = anonymousId;
+  next();
+});
+
+// Routes
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.json({ success: true, data: { status: 'ok' } });
+});
+
+app.get('/api/wishes', async (req: Request, res: Response) => {
+  try {
+    const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+    const wishes = await listWishes(category);
+    res.json({ success: true, data: wishes });
+  } catch (error) {
+    console.error('Error listing wishes:', error);
+    res.status(500).json({
+      success: false,
+      error: safeErrorMessage(error),
+    });
+  }
+});
+
+app.get('/api/wishes/:id', async (req: Request, res: Response) => {
+  try {
+    const wish = await getWishById(req.params.id as string);
+
+    if (!wish) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Wish not found.' },
+      });
+    }
+
+    return res.json({ success: true, data: wish });
+  } catch (error) {
+    console.error('Error getting wish:', error);
+    res.status(500).json({
+      success: false,
+      error: safeErrorMessage(error),
+    });
+  }
+});
+
+app.post('/api/wishes', ipBackstop, async (req: Request, res: Response) => {
+  try {
+    const parsed = createWishSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_REQUEST',
+          message: parsed.error.issues?.[0]?.message ?? 'Wish must be between 3 and 280 characters.',
+        },
+      });
+    }
+
+    const anonymousId = (req as any).anonymousId as string;
+    const result = await createWish(parsed.data, anonymousId);
+
+    // Check if there was a rate limit error
+    if ('error' in result && 'code' in result) {
+      return res.status(429).json({
+        success: false,
+        error: result,
+      });
+    }
+
+    return res.status(201).json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error creating wish:', error);
+    res.status(500).json({
+      success: false,
+      error: safeErrorMessage(error),
+    });
+  }
+});
+
+app.post('/api/wishes/:id/light', ipBackstop, async (req: Request, res: Response) => {
+  try {
+    const parsed = lightSchema.safeParse({ wishId: req.params.id, ...req.body });
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_REQUEST', message: 'Light request was invalid.' },
+      });
+    }
+
+    const anonymousId = (req as any).anonymousId as string;
+    const result = await addLight(parsed.data.wishId, anonymousId);
+
+    // Check for rate limit error
+    if (result && 'error' in result && 'code' in result) {
+      return res.status(429).json({
+        success: false,
+        error: result,
+      });
+    }
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Wish not found.' },
+      });
+    }
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error sending light:', error);
+    res.status(500).json({
+      success: false,
+      error: safeErrorMessage(error),
+    });
+  }
+});
+
+app.post('/api/wishes/:id/save', async (req: Request, res: Response) => {
+  try {
+    const anonymousId = (req as any).anonymousId as string;
+    const result = await saveWish(req.params.id as string, anonymousId);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Wish not found.' },
+      });
+    }
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error saving wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.delete('/api/wishes/:id/save', async (req: Request, res: Response) => {
+  try {
+    const anonymousId = (req as any).anonymousId as string;
+    const result = await unsaveWish(req.params.id as string, anonymousId);
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error unsaving wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/me/sky', async (req: Request, res: Response) => {
+  try {
+    const anonymousId = (req as any).anonymousId as string;
+    const sky = await getPersonalSky(anonymousId);
+    return res.json({ success: true, data: sky });
+  } catch (error) {
+    console.error('Error getting personal sky:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.post('/api/me/recovery-phrase', async (req: Request, res: Response) => {
+  try {
+    const anonymousId = (req as any).anonymousId as string;
+    if (!anonymousId) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Session required.' },
+      });
+    }
+
+    const result = await createRecoveryPhrase(anonymousId);
+    if ('error' in result && result.code === 'CONFLICT') {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'CONFLICT', message: result.error },
+      });
+    }
+
+    if ('error' in result) {
+      return res.status(400).json({
+        success: false,
+        error: { code: result.code, message: result.error },
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      data: { phrase: result.phrase },
+    });
+  } catch (error) {
+    console.error('Error generating recovery phrase:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.post('/api/me/recover', recoverRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const parsed = recoverSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Invalid recovery phrase.' },
+      });
+    }
+
+    const user = await recoverUserByPhrase(parsed.data.phrase);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Invalid recovery phrase.' },
+      });
+    }
+
+    // Issue session cookie bound to the recovered user identity
+    res.cookie(sessionCookieName, user.anonymous_id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 365,
+      path: '/',
+    });
+
+    (req as any).anonymousId = user.anonymous_id;
+
+    return res.json({
+      success: true,
+      data: { recovered: true },
+    });
+  } catch (error) {
+    console.error('Error recovering identity:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.post('/api/wishes/:id/fulfill', async (req: Request, res: Response) => {
+  try {
+    const parsed = fulfillSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_REQUEST', message: 'Fulfillment note must be 280 characters or less.' },
+      });
+    }
+
+    const anonymousId = (req as any).anonymousId as string;
+    const result = await fulfillWish(req.params.id as string, anonymousId, parsed.data.note);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Wish not found.' },
+      });
+    }
+
+    if ('error' in result && 'code' in result) {
+      return res.status(403).json({
+        success: false,
+        error: result,
+      });
+    }
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error fulfilling wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/morning-sky', async (_req: Request, res: Response) => {
+  try {
+    const wishes = await getFulfilledWishes();
+    return res.json({ success: true, data: wishes });
+  } catch (error) {
+    console.error('Error loading morning sky:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/constellations', async (_req: Request, res: Response) => {
+  try {
+    const constellations = await listConstellations();
+    return res.json({ success: true, data: constellations });
+  } catch (error) {
+    console.error('Error loading constellations:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/constellations/:slug', async (req: Request, res: Response) => {
+  try {
+    const wishes = await listWishes(req.params.slug as string);
+    return res.json({ success: true, data: wishes });
+  } catch (error) {
+    console.error('Error loading constellation wishes:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/mirror', async (req: Request, res: Response) => {
+  try {
+    const wishId = req.query.wishId;
+    if (typeof wishId !== 'string' || !wishId) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_REQUEST', message: 'wishId query parameter required.' },
+      });
+    }
+
+    const mirror = await getMirrorWishes(wishId);
+    return res.json({ success: true, data: mirror });
+  } catch (error) {
+    console.error('Error loading mirror wishes:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.post('/api/wishes/:id/report', async (req: Request, res: Response) => {
+  const parsed = reportSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Report reason was invalid.' } });
+  try {
+    const result = await reportWish(req.params.id as string, (req as any).anonymousId as string, parsed.data.reason);
+    if (!result) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Wish not found.' } });
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error reporting wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+app.get('/api/admin/queue', requireAdmin, async (_req: Request, res: Response) => {
+  try { return res.json({ success: true, data: await getModerationQueue() }); }
+  catch (error) { console.error('Error loading moderation queue:', error); return res.status(500).json({ success: false, error: safeErrorMessage(error) }); }
+});
+
+app.post('/api/admin/wishes/:id/moderate', requireAdmin, async (req: Request, res: Response) => {
+  const parsed = moderationSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Moderation action was invalid.' } });
+  try {
+    const wish = await moderateWish(req.params.id as string, parsed.data.action);
+    if (!wish) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Wish not found.' } });
+    return res.json({ success: true, data: wish });
+  } catch (error) {
+    console.error('Error moderating wish:', error);
+    return res.status(500).json({ success: false, error: safeErrorMessage(error) });
+  }
+});
+
+// Error handling for unhandled routes
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    error: { code: 'NOT_FOUND', message: 'Endpoint not found.' },
+  });
+});
+
+// Start server
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+    console.log(`Database: ${process.env.DATABASE_URL ? 'Connected to PostgreSQL' : 'WARNING: DATABASE_URL not set'}`);
+  });
+}
+
+export default app;
+export { app };
+

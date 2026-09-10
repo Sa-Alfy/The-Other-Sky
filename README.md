@@ -3,9 +3,9 @@
 A quiet, anonymous digital universe where wishes become stars.
 
 ## Current milestone
-**Milestone 6.3: Depth-Driven Sky, Release Motion & Bangla Support**
+**Milestone 6.4: Quiet UI, Constellation Navigation & Bangla Support**
 
-Refines the Milestone 6 depth work so the sky actually reads as three-dimensional, adds in-sky navigation, gives releasing a wish a visible arc from words to star, and opens the whole experience up in Bangla. (Note: this is distinct from the spec's *Phase 6 — Semantic Clustering*, which remains upcoming; see [docs/ROADMAP.md](docs/ROADMAP.md).)
+Refines the Milestone 6 depth work so the sky actually reads as three-dimensional, gives releasing a wish a visible arc from words to star, redesigns the interface around the canvas so it belongs to the same product, and opens the whole experience up in Bangla. (Note: this is distinct from the spec's *Phase 6 — Semantic Clustering*, which remains upcoming; see [docs/ROADMAP.md](docs/ROADMAP.md).)
 
 Phase 5 core product features plus the depth/navigation work are implemented and verified:
 - **Interactive Galaxy**: 2D HTML5 canvas where **depth is the dominant visual cue**. Depth drives each star's radius (~3× spread front to back), opacity, core sharpness and twinkle amplitude, with per-star `size`/`brightness` applied only as a ±15% jitter — far stars are faint diffuse specks, near stars crisp points with a specular centre. Stars are drawn far-to-near (painter's algorithm).
@@ -13,6 +13,7 @@ Phase 5 core product features plus the depth/navigation work are implemented and
 - **Bangla (বাংলা) language support**: Full English/Bangla UI with the choice persisted per visitor and mirrored onto `<html lang>`, switchable from the landing screen or the sky's top bar. Translations are written for **meaning rather than word-for-word** (*"It happened."* → *"সত্যি হয়েছে।"*, *"You're not the only one."* → *"তুমি একা নও।"*), use the intimate তুমি register to match the app's private tone, and render counts and timestamps in Bengali numerals (৫৭ জন, ১৯ ঘণ্টা আগে). Ships Noto Sans/Serif Bengali, and drops the design's wide letter-spacing and uppercase for Bangla, where a connected script makes both harmful.
 - **Parallax & perspective**: Camera panning is distributed across depth (0.45–1.50 pan factors), and zoom is per-depth, so zooming expands near layers faster than far ones. The galactic band and three ambient dust sheets are rendered **in-canvas** so they parallax with the sky rather than staying fixed to the viewport, with dust clustering along the same diagonal band the server biases star placement toward (`starPlacement.ts`).
 - **Constellation lines**: When a single constellation is in view (`?category=...`), its stars are connected into one shape via a minimum spanning tree over world-space distance — every star joins with a line to its nearest neighbour, with no full mesh and no orphans.
+- **Constellations are the destination**: Picking a constellation from the index goes straight to the sky where it is drawn, one click away. An in-sky switcher (`‹ name ›`) then steps through all six and wraps around, with **Read as a list** for the text view and **Show entire sky** to clear the filter — previously the drawing took three clicks and two page loads, and the filtered sky was a dead end you had to back out of.
 - **Ambient idle drift**: After a few seconds without input the camera wanders gently on a bounded path so the sky feels alive; any interaction, an open selection, or `prefers-reduced-motion` suppresses it immediately.
 - **Find a wish**: Client-side keyword search in the sky's top bar filters the visible stars with a live match count, no extra API calls.
 - **Wish-becomes-a-star release**: Submitting a wish plays a single continuous sequence — the wish text condenses in place, a point of light rises into the sky while the camera glides to the new star, and that star flares on the canvas (expanding ring plus a brightness lift). The confirmation and "keep this link" panel are held back until the star has arrived, so the copy confirms something the reader just watched happen.
@@ -20,11 +21,12 @@ Phase 5 core product features plus the depth/navigation work are implemented and
 - **Star visibility & reachability**: Distant stars are held above ~1.3px and 0.5 opacity and always keep a solid core — depth still roughly doubles brightness front to back, but no wish is ever too faint to find. Camera panning is clamped so roughly a third of the sky always stays in view; the starfield can never be dragged out of reach.
 - **Sky controls & keyboard**: On-screen zoom in/out and **Recenter** controls, plus arrow keys to pan (shift for larger steps), `+`/`-` to zoom and `0` to recenter, with a visible focus ring on the canvas.
 - **Hover to read**: Hovering a star shows its text at the cursor with a clear ring and pointer cursor, so the sky can be read by scanning rather than clicking each star blind.
+- **Quiet interface**: One shared token set — deep ground, graded cream inks, hairlines instead of borders, a single starlight accent — applied across every surface so the chrome recedes and the sky stays the subject. The wish reads as an inscription (display serif, actions as equal text cells on a hairline) rather than a post with a like/save/share bar, and the sub-pages sit on the same ground with serif titles and hairline-separated rows instead of boxed cards. On narrow screens the top bar wraps to two rows and the wish card becomes a bottom sheet.
 - **Accessibility**: Full reduced-motion support (no twinkle, no drift, no flare, instant camera settle) and a screen-reader list mirroring the visible stars.
 - **Personal Sky (`/me`)**: Private three-tab sanctuary for tracking your own wishes, saved stranger wishes, and light sent history, with voluntary fulfillment actions and a **recovery-phrase flow** ("Already have a sky? Recover it") so the sky can be found again from a different browser/device without any account, email, or password.
 - **Keep this link**: Releasing a wish surfaces a shareable `?wishId=...` deep-link so an anonymous author can return to their own wish later, independent of the recovery phrase. The composer shows a live character count against the 280-character limit.
 - **The Morning Sky (`/morning-sky`)**: Serene dawn space showcasing wishes that came true (*"It happened."*) with personal fulfillment reflections.
-- **Constellations (`/constellations`)**: Thematic clustering across 6 core categories (Hope, Love, Peace, Healing, Growth, Clarity) with star counts and evocative descriptions.
+- **Constellations (`/constellations`)**: Thematic clustering across 6 core categories (Hope, Love, Peace, Healing, Growth, Clarity) with star counts and evocative descriptions, presented as one hairline lattice.
 - **The Mirror (`/api/mirror` + `MirrorPanel`)**: Emotional resonance discovery finding related stranger wishes using PostgreSQL full-text search (`tsvector`), returning *"You're not the only one."*
 - **Save / Unsave**: Instant wish saving into the user's private collection.
 - **Deep-linking & Navigation**: Direct navigation via `?wishId=...` and `?category=...`, with responsive navigation bar and smooth dialog dismissal.
@@ -99,7 +101,8 @@ Open **`http://localhost:5173`**:
 - Use **"Find a wish…"** in the top bar to filter the sky down to stars matching a keyword.
 - Click **"Leave a Wish"** to compose and release a wish — watch the words condense and rise into the sky as a new star — then keep the returned link to find it again.
 - Switch between **English and বাংলা** with the toggle at the top right (on the landing screen or in the sky).
-- Use the top navigation bar to explore **Constellations**, the **Morning Sky**, and your **Personal Sky**. Opening a single constellation draws its stars connected into one shape.
+- Use the top navigation bar to explore **Constellations**, the **Morning Sky**, and your **Personal Sky**.
+- In **Constellations**, pick any one to see it drawn in the sky, then use `‹ ›` to walk through the rest without leaving the canvas.
 
 ## Key Commands
 
@@ -176,5 +179,5 @@ tests 8 | pass 8 | fail 0
 
 ---
 
-**Status:** Milestone 6.3 Complete  
+**Status:** Milestone 6.4 Complete  
 **Last updated:** 2026-09-10  

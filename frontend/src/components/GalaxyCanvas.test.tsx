@@ -47,7 +47,9 @@ describe('GalaxyCanvas component (smoke & interface tests)', () => {
       />
     )
 
-    const canvas = screen.getByLabelText('Galaxy of wishes canvas')
+    // Substring match: the label also documents the pan/zoom/keyboard
+    // interactions for screen readers, and that copy may change.
+    const canvas = screen.getByLabelText(/Galaxy of wishes canvas/i)
     expect(canvas).toBeInTheDocument()
     expect(canvas).toHaveClass('starfield')
   })
@@ -66,10 +68,15 @@ describe('GalaxyCanvas component (smoke & interface tests)', () => {
 
     expect(ref.current).toBeDefined()
     expect(typeof ref.current?.recenterOnWish).toBe('function')
+    // The sky controls in App.tsx drive zoom and recentering through this ref.
+    expect(typeof ref.current?.zoomBy).toBe('function')
+    expect(typeof ref.current?.resetView).toBe('function')
 
-    // Calling recenterOnWish with a valid wish does not throw
+    // Calling the imperative handles does not throw
     expect(() => {
       ref.current?.recenterOnWish(sampleWishes[0], true)
+      ref.current?.zoomBy(1.3)
+      ref.current?.resetView()
     }).not.toThrow()
   })
 })

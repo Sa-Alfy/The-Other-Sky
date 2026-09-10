@@ -32,7 +32,12 @@ export interface Wish {
 
 export interface GalaxyCanvasRef {
   recenterOnWish: (wish: Wish, instant?: boolean) => void
+  zoomBy: (factor: number) => void
+  resetView: () => void
 }
+
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 4.0
 
 interface GalaxyCanvasProps {
   wishes: Wish[]
@@ -97,6 +102,23 @@ function panFactor(depthT: number): number {
 // sky opens up around you instead of scaling like a flat image.
 function zoomFactor(depthT: number, cameraScale: number): number {
   return 1 + (cameraScale - 1) * (0.55 + depthT * 0.85)
+}
+
+// Fraction of the viewport that must always still show sky. Without this the
+// camera pans without limit and the whole starfield can be dragged off-screen
+// with no way back short of a reload.
+const MIN_VISIBLE_FRACTION = 0.32
+
+// Constrains a camera translation so the starfield can never be panned out of
+// reach. Measured at mid-depth, which all layers track closely enough.
+function clampPan(value: number, viewportSize: number, cameraScale: number): number {
+  const pan = panFactor(0.5)
+  const worldSize = viewportSize * zoomFactor(0.5, cameraScale)
+  const margin = viewportSize * MIN_VISIBLE_FRACTION
+  const min = (margin - worldSize) / pan
+  const max = (viewportSize - margin) / pan
+  if (min > max) return (min + max) / 2
+  return Math.max(min, Math.min(max, value))
 }
 
 interface DustPoint {
@@ -195,6 +217,13 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
     })
 
     const [hoveredWishId, setHoveredWishId] = useState<string | null>(null)
+    // Preview of the hovered wish, anchored to the cursor rather than to the
+    // star, so it stays put while the camera is still easing into place.
+    const [hoverPreview, setHoverPreview] = useState<{
+      text: string
+      x: number
+      y: number
+    } | null>(null)
     const wishesRef = useRef(wishes)
     const selectedWishRef = useRef(selectedWish)
     const hoveredWishIdRef = useRef(hoveredWishId)
@@ -253,9 +282,39 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       }
     }, [])
 
+    // Zoom about the viewport centre, for the on-screen controls and keyboard.
+    const zoomBy = useCallback((factor: number) => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const rect = canvas.getBoundingClientRect()
+      const cam = cameraRef.current
+      lastInteractionRef.current = performance.now()
+
+      const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, cam.targetScale * factor))
+      const centreX = rect.width / 2
+      const centreY = rect.height / 2
+      const worldX = (centreX - cam.targetX) / cam.targetScale
+      const worldY = (centreY - cam.targetY) / cam.targetScale
+
+      cam.targetScale = newScale
+      cam.targetX = centreX - worldX * newScale
+      cam.targetY = centreY - worldY * newScale
+    }, [])
+
+    // Escape hatch back to the default framing of the whole sky.
+    const resetView = useCallback(() => {
+      const cam = cameraRef.current
+      lastInteractionRef.current = performance.now()
+      cam.targetX = 0
+      cam.targetY = 0
+      cam.targetScale = 1
+    }, [])
+
     useImperativeHandle(ref, () => ({
       recenterOnWish,
-    }), [recenterOnWish])
+      zoomBy,
+      resetView,
+    }), [recenterOnWish, zoomBy, resetView])
 
     // Main animation & render loop
     useEffect(() => {
@@ -302,6 +361,12 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
         } else {
           idle.active = false
         }
+
+        // Keep the sky reachable. Applied here rather than in each input
+        // handler so drag, wheel, pinch, keyboard and recenter are all bounded
+        // by the same rule.
+        cam.targetX = clampPan(cam.targetX, rect.width, cam.targetScale)
+        cam.targetY = clampPan(cam.targetY, rect.height, cam.targetScale)
 
         // Smooth camera lerp
         if (reducedMotion) {
@@ -446,10 +511,12 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
           const clampedSize = Math.max(1.2, Math.min(2.8, wish.size))
           const sizeJitter = 0.85 + ((clampedSize - 1.2) / 1.6) * 0.3
 
-          // Radius: ~1px at the back, ~3.4px at the front — a 3.5x spread that
-          // is legible at a glance. Zoom enlarges near stars faster than far.
+          // Radius: ~1.3px at the back, ~3.4px at the front. The back of the
+          // field is deliberately kept above ~1px and well inside the visible
+          // range — every star is somebody's wish, so "far" must still mean
+          // findable and clickable, not nearly invisible.
           const radiusZoom = 1 + (cam.currentScale - 1) * 0.3 * (0.35 + depthT)
-          const coreRadius = (0.85 + depthT * 2.5) * sizeJitter * radiusZoom
+          const coreRadius = (1.3 + depthT * 2.1) * sizeJitter * radiusZoom
 
           // Far stars carry a proportionally wider, softer halo; near stars a
           // tighter, more defined one.
@@ -459,7 +526,9 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
 
           const clampedBrightness = Math.max(0.8, Math.min(1.3, wish.brightness))
           const brightnessJitter = 0.92 + ((clampedBrightness - 0.8) / 0.5) * 0.16
-          const baseOpacity = (0.26 + depthT * 0.64) * brightnessJitter
+          // Floor at 0.5 so distant stars stay clearly legible against the
+          // background; depth still doubles apparent brightness front to back.
+          const baseOpacity = (0.5 + depthT * 0.45) * brightnessJitter
 
           // Twinkle: near/bright stars scintillate more visibly than faint ones.
           let twinkleFactor = 0
@@ -468,7 +537,7 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
             const amplitude = 0.06 + depthT * 0.13
             twinkleFactor = Math.sin((time / period) * Math.PI * 2 + phase) * amplitude
           }
-          const alpha = Math.max(0.08, Math.min(1.0, baseOpacity * (1 + twinkleFactor)))
+          const alpha = Math.max(0.34, Math.min(1.0, baseOpacity * (1 + twinkleFactor)))
 
           // 1. Soft radial halo
           const glow = ctx.createRadialGradient(wx, wy, coreRadius * 0.25, wx, wy, glowRadius)
@@ -480,9 +549,9 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
           ctx.arc(wx, wy, glowRadius, 0, Math.PI * 2)
           ctx.fill()
 
-          // 2. Core — fades in with proximity, so distant stars stay diffuse
-          // specks instead of hard dots pretending to be close.
-          const coreStrength = Math.min(1, 0.25 + depthT * 1.25)
+          // 2. Core — firms up with proximity so near stars read as closer,
+          // but every star keeps a solid, clickable centre.
+          const coreStrength = Math.min(1, 0.62 + depthT * 0.6)
           ctx.fillStyle = `hsla(${color.h}, ${color.s}%, ${color.l}%, ${alpha * coreStrength})`
           ctx.beginPath()
           ctx.arc(wx, wy, coreRadius, 0, Math.PI * 2)
@@ -514,10 +583,12 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
             ctx.arc(wx, wy, ringRadius, 0, Math.PI * 2)
             ctx.stroke()
           } else if (isHovered) {
-            ctx.strokeStyle = `hsla(${color.h}, ${color.s}%, 90%, 0.35)`
-            ctx.lineWidth = 1
+            // Clear, deliberate hover target — the previous 0.35-alpha hairline
+            // was hard to notice while scanning the sky.
+            ctx.strokeStyle = `hsla(${color.h}, ${color.s}%, 96%, 0.8)`
+            ctx.lineWidth = 1.5
             ctx.beginPath()
-            ctx.arc(wx, wy, coreRadius + 4, 0, Math.PI * 2)
+            ctx.arc(wx, wy, coreRadius + 5, 0, Math.PI * 2)
             ctx.stroke()
           }
         }
@@ -639,8 +710,13 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       if (!activePointersRef.current.has(e.pointerId)) {
         // Hover detection on desktop when not dragging
         const rect = e.currentTarget.getBoundingClientRect()
-        const nearest = findNearestWishAtScreenPos(e.clientX - rect.left, e.clientY - rect.top)
+        const localX = e.clientX - rect.left
+        const localY = e.clientY - rect.top
+        const nearest = findNearestWishAtScreenPos(localX, localY)
         setHoveredWishId(nearest ? nearest.id : null)
+        setHoverPreview(
+          nearest ? { text: nearest.text, x: localX, y: localY } : null
+        )
         return
       }
 
@@ -654,6 +730,7 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
         if (distFromStart >= 5) {
           drag.isDragging = true
           setHoveredWishId(null)
+          setHoverPreview(null)
         }
 
         if (drag.isDragging) {
@@ -728,16 +805,62 @@ export const GalaxyCanvas = forwardRef<GalaxyCanvasRef, GalaxyCanvasProps>(
       }
     }
 
+    // Keyboard navigation, so the sky is usable without a mouse wheel or
+    // trackpad gestures (and discoverable for anyone who never tries dragging).
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLCanvasElement>) => {
+      const cam = cameraRef.current
+      const step = e.shiftKey ? 160 : 60
+      let handled = true
+
+      switch (e.key) {
+        case 'ArrowLeft': cam.targetX += step; break
+        case 'ArrowRight': cam.targetX -= step; break
+        case 'ArrowUp': cam.targetY += step; break
+        case 'ArrowDown': cam.targetY -= step; break
+        case '+':
+        case '=': zoomBy(1.25); break
+        case '-':
+        case '_': zoomBy(1 / 1.25); break
+        case '0': resetView(); break
+        default: handled = false
+      }
+
+      if (handled) {
+        e.preventDefault()
+        lastInteractionRef.current = performance.now()
+      }
+    }
+
     return (
-      <canvas
-        ref={canvasRef}
-        className="starfield"
-        aria-label="Galaxy of wishes canvas"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
-      />
+      <>
+        <canvas
+          ref={canvasRef}
+          className="starfield"
+          aria-label="Galaxy of wishes canvas — drag to pan, scroll to zoom, arrow keys to move"
+          tabIndex={0}
+          style={hoveredWishId ? { cursor: 'pointer' } : undefined}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          onPointerLeave={() => {
+            setHoveredWishId(null)
+            setHoverPreview(null)
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        {hoverPreview && (
+          <div
+            className="star-hover-preview"
+            style={{ left: hoverPreview.x, top: hoverPreview.y }}
+            aria-hidden="true"
+          >
+            {hoverPreview.text.length > 90
+              ? `${hoverPreview.text.slice(0, 90)}…`
+              : hoverPreview.text}
+          </div>
+        )}
+      </>
     )
   }
 )

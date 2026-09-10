@@ -157,6 +157,73 @@ button {
   cursor: grabbing;
 }
 
+.starfield:focus-visible {
+  outline: 1px solid rgba(233, 222, 196, 0.35);
+  outline-offset: -2px;
+}
+
+/* Hover preview: lets you read a wish while scanning the sky instead of having
+   to click each star to find out what it says. Anchored to the cursor. */
+.star-hover-preview {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, calc(-100% - 14px));
+  max-width: 240px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(10, 14, 22, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(244, 239, 231, 0.92);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: center;
+  pointer-events: none;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* Zoom / recenter controls — pan and zoom were previously discoverable only by
+   guessing that drag and scroll wheel worked. */
+.sky-controls {
+  position: absolute;
+  z-index: 3;
+  left: clamp(1rem, 2vw, 2rem);
+  bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sky-control {
+  width: 2.1rem;
+  height: 2.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(233, 222, 196, 0.18);
+  background: rgba(12, 17, 26, 0.7);
+  color: rgba(244, 239, 231, 0.75);
+  font-size: 0.9rem;
+  line-height: 1;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+
+.sky-control:hover {
+  border-color: rgba(233, 222, 196, 0.45);
+  color: #f7f3ee;
+  background: rgba(18, 24, 36, 0.85);
+}
+
+.sky-control--wide {
+  width: auto;
+  padding: 0 0.7rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
 .top-bar {
   position: relative;
   z-index: 2;

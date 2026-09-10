@@ -307,6 +307,39 @@ function GalaxyView() {
             showConstellationLines={Boolean(filterCategory)}
           />
 
+          <div className="sky-controls">
+            <button
+              type="button"
+              className="sky-control"
+              onClick={() => galaxyCanvasRef.current?.zoomBy(1.3)}
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className="sky-control"
+              onClick={() => galaxyCanvasRef.current?.zoomBy(1 / 1.3)}
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="sky-control sky-control--wide"
+              onClick={() => {
+                handleCloseWish()
+                galaxyCanvasRef.current?.resetView()
+              }}
+              aria-label="Recenter the sky"
+              title="Recenter the sky"
+            >
+              Recenter
+            </button>
+          </div>
+
           <ul className="sr-only" aria-label="Wishes in the sky">
             {visibleWishes.map((wish) => (
               <li key={wish.id}>

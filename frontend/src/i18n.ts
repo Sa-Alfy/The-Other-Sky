@@ -2,6 +2,10 @@ import { createContext, useCallback, useContext } from 'react'
 
 export type Language = 'en' | 'bn'
 
+/** The six constellations, in the order they are stepped through in the sky.
+ *  Shared so the composer, the index and the in-sky switcher cannot drift. */
+export const WISH_CATEGORIES = ['hope', 'love', 'peace', 'healing', 'growth', 'clarity'] as const
+
 const STORAGE_KEY = 'othersky_lang'
 
 /**
@@ -59,6 +63,9 @@ export const strings = {
   'sky.recenter': { en: 'Recenter', bn: 'মাঝে ফেরাও' },
   'sky.recenterLabel': { en: 'Recenter the sky', bn: 'আকাশ মাঝে ফিরিয়ে আনো' },
   'sky.constellationBanner': { en: 'Constellation', bn: 'তারামণ্ডল' },
+  'sky.prevConstellation': { en: 'Previous constellation', bn: 'আগের তারামণ্ডল' },
+  'sky.nextConstellation': { en: 'Next constellation', bn: 'পরের তারামণ্ডল' },
+  'sky.readAsList': { en: 'Read as a list', bn: 'তালিকা হিসেবে পড়ো' },
   'sky.showEntireSky': { en: 'Show entire sky ×', bn: 'পুরো আকাশ দেখাও ×' },
   'sky.showAllStars': { en: 'Show all stars', bn: 'সব তারা দেখাও' },
 
@@ -174,8 +181,8 @@ export const strings = {
     bn: 'অচেনা মানুষেরা এক সুতোয় বাঁধা — একই রকম চাওয়া, একই রকম ব্যথা।',
   },
   'constellations.explore': {
-    en: 'Explore this Sky Region',
-    bn: 'আকাশের এই অংশ ঘুরে দেখো',
+    en: 'See it in the sky',
+    bn: 'আকাশে দেখো',
   },
   'constellations.all': { en: 'All Constellations', bn: 'সব তারামণ্ডল' },
   'constellations.loading': { en: 'Tracing the stars...', bn: 'তারাগুলো মেলানো হচ্ছে…' },

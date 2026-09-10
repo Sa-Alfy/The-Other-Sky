@@ -120,7 +120,7 @@ export function Constellations() {
         {constellations.map((c) => (
           <Link
             key={c.slug}
-            to={`/constellations/${c.slug}`}
+            to={`/sky?category=${c.slug}`}
             className={`chip ${slug === c.slug ? 'active' : ''}`}
           >
             {categoryLabel(c.slug)} ({localizeDigits(c.wishCount, language)})
@@ -137,7 +137,7 @@ export function Constellations() {
             <article
               key={c.slug}
               className="constellation-card"
-              onClick={() => navigate(`/constellations/${c.slug}`)}
+              onClick={() => navigate(`/sky?category=${c.slug}`)}
             >
               <span className="constellation-mark">✦</span>
               <h2>{categoryLabel(c.slug)}</h2>

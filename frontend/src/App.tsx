@@ -14,7 +14,7 @@ import { Constellations } from './pages/Constellations'
 import { MorningSky } from './pages/MorningSky'
 import { PersonalSky } from './pages/PersonalSky'
 import { formatRelativeTime } from './utils/formatRelativeTime'
-import { localizeDigits, useCategoryLabel, useLanguage } from './i18n'
+import { WISH_CATEGORIES, localizeDigits, useCategoryLabel, useLanguage } from './i18n'
 
 const apiBase = import.meta.env.VITE_API_URL || ''
 
@@ -258,6 +258,21 @@ function GalaxyView() {
     setReleaseText('')
   }, [])
 
+  // Steps to the next/previous constellation, wrapping around so the set
+  // feels like one continuous sky rather than a list with dead ends.
+  const goToConstellation = useCallback(
+    (direction: number) => {
+      const current = WISH_CATEGORIES.indexOf(
+        (filterCategory ?? '') as (typeof WISH_CATEGORIES)[number]
+      )
+      const from = current === -1 ? 0 : current
+      const next =
+        WISH_CATEGORIES[(from + direction + WISH_CATEGORIES.length) % WISH_CATEGORIES.length]
+      setSearchParams({ category: next })
+    },
+    [filterCategory, setSearchParams]
+  )
+
   const handleCopyReleaseLink = async () => {
     if (!releaseLink) return
     try {
@@ -333,20 +348,44 @@ function GalaxyView() {
             </div>
           )}
 
-          {/* Active Category Filter Indicator */}
+          {/* Constellation switcher — lets you walk the whole set without
+              leaving the sky, which is the only place they're actually drawn. */}
           {filterCategory && (
-            <div className="active-filter-banner">
-              <span>
-                {t('sky.constellationBanner')}: <strong>{categoryLabel(filterCategory)}</strong>
-              </span>
-              <button
-                type="button"
-                className="clear-filter-btn"
-                onClick={() => setSearchParams({})}
-                aria-label={t('sky.showAllStars')}
-              >
-                {t('sky.showEntireSky')}
-              </button>
+            <div className="constellation-switcher">
+              <div className="switcher-step">
+                <button
+                  type="button"
+                  className="switcher-arrow"
+                  onClick={() => goToConstellation(-1)}
+                  aria-label={t('sky.prevConstellation')}
+                  title={t('sky.prevConstellation')}
+                >
+                  ‹
+                </button>
+                <strong className="switcher-name">{categoryLabel(filterCategory)}</strong>
+                <button
+                  type="button"
+                  className="switcher-arrow"
+                  onClick={() => goToConstellation(1)}
+                  aria-label={t('sky.nextConstellation')}
+                  title={t('sky.nextConstellation')}
+                >
+                  ›
+                </button>
+              </div>
+              <div className="switcher-links">
+                <Link to={`/constellations/${filterCategory}`} className="clear-filter-btn">
+                  {t('sky.readAsList')}
+                </Link>
+                <button
+                  type="button"
+                  className="clear-filter-btn"
+                  onClick={() => setSearchParams({})}
+                  aria-label={t('sky.showAllStars')}
+                >
+                  {t('sky.showEntireSky')}
+                </button>
+              </div>
             </div>
           )}
 
@@ -601,7 +640,7 @@ function GalaxyView() {
               </div>
               <div className="composer-footer">
                 <select value={category} onChange={(event) => setCategory(event.target.value)}>
-                  {['hope', 'love', 'peace', 'healing', 'growth', 'clarity'].map((slug) => (
+                  {WISH_CATEGORIES.map((slug) => (
                     <option key={slug} value={slug}>
                       {categoryLabel(slug)}
                     </option>

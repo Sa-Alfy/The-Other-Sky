@@ -1116,6 +1116,57 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
+/* In-sky constellation switcher. The constellations are only ever drawn in
+   the sky, so this is where moving between them belongs — previously you had
+   to leave, return to the index and pick another. */
+.constellation-switcher {
+  position: absolute;
+  top: 4.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  text-align: center;
+}
+
+.switcher-step {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.switcher-name {
+  min-width: 7.5rem;
+  font-size: 0.74rem;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.switcher-arrow {
+  border: none;
+  background: transparent;
+  color: var(--ink-4);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.15rem 0.5rem;
+  transition: color 160ms ease;
+}
+
+.switcher-arrow:hover {
+  color: var(--ink);
+}
+
+.switcher-links {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
 .active-filter-banner {
   position: absolute;
   top: 4.75rem;
